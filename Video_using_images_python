@@ -1,0 +1,35 @@
+import os
+import cv2
+
+path = 'D:\CEM300\LaneTracking\Output\RadarKeyPointBoundary\\'
+filename = 'RadarKeypointBoundaryTracking_2R1V'
+
+fps = 5          # frames per sec
+
+vcodec = "mjpeg"    # video codec for compression
+
+SAVE_COMPRESSED_VIDEO = False
+SAVE_RAW_VIDEO = True
+
+num_images = len(os.listdir(path))           # number of images in the directory
+
+img = cv2.imread(path + '0' + '.jpg')
+
+height, width, layers = img.shape
+
+video = cv2.VideoWriter(path + filename + '.avi', cv2.VideoWriter_fourcc(*"MJPG"), fps, (width, height))
+
+for i in range(1, 300, 1):
+    img = cv2.imread(path + str(i) + '.jpg')
+    video.write(img)
+
+cv2.destroyAllWindows()
+video.release()
+
+# compression using ffmpeg
+if SAVE_COMPRESSED_VIDEO:
+    cmd = 'cd {}; ffmpeg -i {}.avi -vcodec {} -acodec copy {}_{}.avi'.format(path, filename, vcodec, filename, vcodec)
+    os.system(cmd)
+if not SAVE_RAW_VIDEO:
+    cmd = 'cd {}; rm -r {}.avi'.format(path, filename)
+    os.system(cmd)
