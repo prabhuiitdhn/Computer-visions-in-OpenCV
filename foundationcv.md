@@ -2753,15 +2753,15 @@ Warping is coordinate transformation + resampling. Accuracy depends on a good tr
 **A:** Convolution and correlation are similar operations but differ in kernel orientation, affecting symmetry properties.
 
 **Convolution:**
-$$
-(f * g)(x, y) = \sum_{i,j} f(i, j) \cdot g(x-i, y-j)
-$$
+
+   conv(x, y) = sum over i,j of f(i, j) * g(x - i, y - j)
+
 Note: kernel $g$ is flipped (negative indices).
 
 **Correlation:**
-$$
-(f \star g)(x, y) = \sum_{i,j} f(i, j) \cdot g(x+i, y+j)
-$$
+
+   corr(x, y) = sum over i,j of f(i, j) * g(x + i, y + j)
+
 Note: kernel $g$ is not flipped.
 
 **Key difference:**
