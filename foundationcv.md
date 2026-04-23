@@ -2900,44 +2900,42 @@ CCA is fast, simple, foundational to binary image processing. Combined with thre
 
 ### Q67. What are image moments and what information do they capture?
 
-**A:** Moments are statistical properties of pixel distributions, capturing shape information (area, centroid, orientation, roundness).
+**A (Beginner-friendly):**
+Image moments are simple numbers that describe an object's shape in an image.
 
-**Moments:**
-$$
-m_{ij} = \sum_{x,y} x^i y^j I(x, y)
-$$
+Think of them like "shape summary features":
+- one number tells how big the object is,
+- another tells the center,
+- others tell if it is tilted or stretched.
 
-**Central moments** (relative to centroid):
-$$
-\mu_{ij} = \sum_{x,y} (x - \bar{x})^i (y - \bar{y})^j I(x, y)
-$$
+So instead of storing all object pixels, we store a few meaningful numbers.
 
-**Common moments:**
+**Easy intuition:**
+- In physics, moment tells mass distribution.
+- In images, replace mass with pixel intensity.
+- That gives us information about how pixels are distributed in a shape.
 
-1. **$m_{00}$:** total intensity (object area).
-2. **$m_{10}, m_{01}$:** first moments (compute centroid).
-3. **$\mu_{20}, \mu_{02}, \mu_{11}$:** second moments (covariance matrix, orientation, scale).
+**Most important moments for interview:**
+1. **m00**: area (for binary image, this is number of white pixels).
+2. **m10, m01**: used to find object center.
+3. **Central moments**: used for orientation and spread of shape.
 
-**Shape descriptors from moments:**
+**Center (centroid) formula:**
+- x_center = m10 / m00
+- y_center = m01 / m00
 
-1. **Centroid:** $(\bar{x}, \bar{y}) = (m_{10}/m_{00}, m_{01}/m_{00})$.
-2. **Orientation:** $\theta = 0.5 \arctan(2\mu_{11} / (\mu_{20} - \mu_{02}))$.
-3. **Eccentricity/aspect ratio:** $e = \sqrt{1 - \lambda_{min} / \lambda_{max}}$ where $\lambda$ are eigenvalues of covariance.
+**Use cases in computer vision:**
+1. **Find object center** for tracking (for example, ball center in a frame).
+2. **Find orientation** (for example, whether a leaf or pill is tilted).
+3. **Shape matching/classification** (for example, circle vs triangle).
+4. **Quality inspection** in industry (detect if part shape is deformed).
+5. **OCR preprocessing** (character alignment and normalization).
 
-**Hu moments:** invariant to translation, scale, and rotation.
-$$
-M_i = f(m_{ij})
-$$
+**Hu moments (important term):**
+Hu moments are special moment features designed to stay almost same even if object is moved, resized, or rotated.
 
-Seven Hu moments are rotation/scale/translation invariant, useful for shape matching.
-
-**Applications:**
-- Shape classification.
-- Object centroid and orientation.
-- Deformable shape analysis.
-
-**Expert perspective:**
-Moments are interpretable, fast, but low-level. Modern deep learning replaces hand-crafted moments with learned features.
+**One-line memory trick:**
+Image moments convert a shape into a small set of numbers for area, center, tilt, and shape comparison.
 
 ---
 
