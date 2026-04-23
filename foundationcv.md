@@ -158,9 +158,10 @@ Pooling is a form of dimensionality reduction. In max pooling, we retain the max
 
 **Expert view:**
 ReLU's success is tied to the gradient flow problem. In deep networks with many sigmoid/tanh layers, gradients are multiplied across layers:
-$$
-\frac{\partial L}{\partial w^{(1)}} = \frac{\partial L}{\partial w^{(L)}} \cdot \frac{\partial w^{(L)}}{\partial w^{(L-1)}} \cdots \frac{\partial w^{(2)}}{\partial w^{(1)}}
-$$
+
+   dL/dw(1) = dL/dw(L) * dw(L)/dw(L-1) * ... * dw(2)/dw(1)
+
+This means: gradient at layer 1 = product of all gradients chained from layer L down to layer 2.
 
 If each factor is < 1 (as with sigmoid gradient), the product vanishes exponentially with depth. ReLU's gradient of 1 for positive inputs avoids this. However, dead neurons (always outputting 0) are a real problem, motivating variants like Leaky ReLU and GELU.
 
