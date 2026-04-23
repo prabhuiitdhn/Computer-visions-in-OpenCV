@@ -2682,41 +2682,99 @@ Robust matching is crucial for real-world applications. RANSAC is standard, but 
 
 ### Q62. What is image warping and what are common geometric transformations?
 
-**A:** Image warping applies geometric transformations (rotation, scaling, perspective) to images. It is essential for image registration, rectification, and content-based image manipulation.
+**A (10th grade explanation):**
+Image warping means "reshaping" an image by moving pixels to new places.
 
-**Common transformations:**
+Think of printing a photo on a rubber sheet:
+- If you rotate it, the photo turns.
+- If you stretch it, objects look bigger/smaller.
+- If you pull one corner, it looks like perspective change.
 
-1. **Affine transformation:**
-   - 2×3 matrix, preserves parallel lines.
-   $$
-   \begin{bmatrix} x' \\ y' \end{bmatrix} = \begin{bmatrix} a & b & c \\ d & e & f \end{bmatrix} \begin{bmatrix} x \\ y \\ 1 \end{bmatrix}
-   $$
-   - Includes: rotation, scaling, translation, skewing.
-   - Requires 3 corresponding points to estimate.
+So, warping is just a math way to move each pixel from old position to new position.
 
-2. **Perspective (homography):**
-   - 3×3 matrix, handles 3D viewpoint changes.
-   $$
-   \begin{bmatrix} x' \\ y' \\ w' \end{bmatrix} = \begin{bmatrix} h_{11} & h_{12} & h_{13} \\ h_{21} & h_{22} & h_{23} \\ h_{31} & h_{32} & h_{33} \end{bmatrix} \begin{bmatrix} x \\ y \\ 1 \end{bmatrix}
-   $$
-   - Requires 4 corresponding points.
+**Interview quick line:**
+Image warping maps coordinates $(x, y)$ in the source image to new coordinates $(x', y')$ in the output image using a geometric transform.
 
-3. **Similarity:** translation + rotation + uniform scaling (preserves angles).
-4. **Rigid:** translation + rotation (no scaling).
+**From basic to expert transformations:**
 
-**Interpolation during warping:**
-- Forward mapping: for each destination pixel, where did it come from? (prone to holes)
-- Backward mapping: for each destination pixel, look back at source. (preferred)
-- Use bilinear/bicubic interpolation at non-integer source locations.
+1. **Rigid transform** (rotation + translation)
+- Shape and size stay same.
+- Distances and angles are preserved.
 
-**Applications:**
-- Image registration (align two images).
-- Panoramic stitching.
-- Document scanning (perspective correction).
-- Face alignment (warp to canonical pose).
+2. **Similarity transform** (rigid + uniform scaling)
+- Same shape, but can zoom in/out.
+- Angles are preserved.
 
-**Expert view:**
-Warping is fundamental to image geometry. Key insight: backward mapping with interpolation avoids holes and aliasing.
+3. **Affine transform** (translation + rotation + scaling + shear)
+- Straight lines stay straight.
+- Parallel lines stay parallel.
+- Matrix form:
+
+$$
+\begin{bmatrix}
+x' \\
+y'
+\end{bmatrix}
+=
+\begin{bmatrix}
+a & b & c \\
+d & e & f
+\end{bmatrix}
+\begin{bmatrix}
+x \\
+y \\
+1
+\end{bmatrix}
+$$
+
+- Need at least 3 point correspondences.
+
+4. **Perspective transform (Homography)**
+- Handles viewpoint change (for example, tilted paper to top view).
+- Parallel lines may no longer remain parallel after projection.
+- Homogeneous form:
+
+$$
+\begin{bmatrix}
+u \\
+v \\
+w
+\end{bmatrix}
+=
+\mathbf{H}
+\begin{bmatrix}
+x \\
+y \\
+1
+\end{bmatrix},
+\quad
+\mathbf{H} \in \mathbb{R}^{3 \times 3}
+$$
+
+Then convert back to pixel coordinates:
+
+$$
+x' = \frac{u}{w}, \quad y' = \frac{v}{w}
+$$
+
+- Need at least 4 point correspondences.
+
+**How warping is implemented in practice:**
+- Use **backward mapping** (inverse warping): for each output pixel, find where it came from in input.
+- Why: forward mapping creates holes; backward mapping fills all output pixels.
+- Because mapped locations are often fractional, use interpolation:
+  - nearest neighbor (fast, blocky)
+  - bilinear (common balance)
+  - bicubic (smoother)
+
+**Where it is used:**
+- Document deskew and perspective correction
+- Panorama stitching
+- Camera/image registration
+- Face alignment before recognition
+
+**Expert takeaway:**
+Warping is coordinate transformation + resampling. Accuracy depends on a good transform estimate (often via matched points + RANSAC) and good interpolation.
 
 ---
 
