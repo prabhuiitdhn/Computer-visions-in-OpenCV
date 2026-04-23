@@ -125,11 +125,13 @@ def morphological_filter(image, size, mode):
     """
     func = np.min if mode == 'erosion' else np.max
     if image.ndim == 3:
-        return np.stack([
+        out = np.stack([
             nonlinear_filter(image[..., c], size, func)
             for c in range(image.shape[2])
         ], axis=-1)
-    return nonlinear_filter(image, size, func)
+        return np.clip(out, 0, 255).astype(np.uint8)
+    out = nonlinear_filter(image, size, func)
+    return np.clip(out, 0, 255).astype(np.uint8)
 
 # ============================================================
 # Downsample for faster processing (original is 2688x1792)
