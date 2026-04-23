@@ -2710,22 +2710,8 @@ Image warping maps coordinates $(x, y)$ in the source image to new coordinates $
 - Parallel lines stay parallel.
 - Matrix form:
 
-$$
-\begin{bmatrix}
-x' \\
-y'
-\end{bmatrix}
-=
-\begin{bmatrix}
-a & b & c \\
-d & e & f
-\end{bmatrix}
-\begin{bmatrix}
-x \\
-y \\
-1
-\end{bmatrix}
-$$
+   x' = a*x + b*y + c  
+   y' = d*x + e*y + f
 
 - Need at least 3 point correspondences.
 
@@ -2734,28 +2720,12 @@ $$
 - Parallel lines may no longer remain parallel after projection.
 - Homogeneous form:
 
-$$
-\begin{bmatrix}
-u \\
-v \\
-w
-\end{bmatrix}
-=
-\mathbf{H}
-\begin{bmatrix}
-x \\
-y \\
-1
-\end{bmatrix},
-\quad
-\mathbf{H} \in \mathbb{R}^{3 \times 3}
-$$
+   [u, v, w]^T = H * [x, y, 1]^T, where H is a 3x3 matrix.
 
 Then convert back to pixel coordinates:
 
-$$
-x' = \frac{u}{w}, \quad y' = \frac{v}{w}
-$$
+   x' = u / w  
+   y' = v / w
 
 - Need at least 4 point correspondences.
 
