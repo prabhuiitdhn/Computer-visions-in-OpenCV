@@ -2436,44 +2436,42 @@ Morphological operations are shape-aware filtering:
 
 ### Q56. What is the Hough transform and how does it detect lines and circles?
 
-**A:** The Hough transform detects geometric shapes (lines, circles) by voting in parameter space. It is robust to occlusion and noise.
+**A:** Hough transform is a method to find shapes like **lines** and **circles** in an image by using a **voting system**.
 
-**Line Hough transform:**
-- **Image space:** $(x, y)$ coordinates.
-- **Parameter space:** line parameters $(r, \theta)$ or $(m, c)$.
+**Easy idea:**
+- First, detect edge points in the image.
+- Then ask: "Which line or circle could pass through this point?"
+- Every edge point gives a **vote** for the possible shapes.
+- The shape that gets the **most votes** is probably the real one.
 
-**Polar line equation:**
+**For line detection:**
+- A line can be represented by parameters instead of listing all its pixels.
+- Common form:
 $$
 r = x \cos\theta + y \sin\theta
 $$
+- Here, $r$ is the distance of the line from the origin, and $\theta$ is its angle.
+- Each edge point votes for many possible $(r, \theta)$ values.
+- If many points belong to the same line, their votes meet at one strong peak.
 
-**Algorithm:**
-1. For each edge point $(x, y)$, compute $(r, \theta)$ for all possible lines through it.
-2. Increment a 2D accumulator array at $(\theta, r)$ for each computed value.
-3. Peaks in accumulator array correspond to lines in image.
+**For circle detection:**
+- A circle is described by its **center** and **radius**: $(c_x, c_y, r)$.
+- Each edge point votes for possible circles passing through it.
+- The circle with the highest votes is chosen.
 
-**Circle detection:**
-- **Parameter space:** $(c_x, c_y, r)$ (3D).
-- For each edge point, accumulate votes for all circles passing through it.
-- More expensive (3D array), but powerful.
+**Why it is useful:**
+- It can still find a line even if the line is **broken**.
+- It works even when the image has some **noise**.
+- It is useful for tasks like **lane detection**, **road signs**, and **coin/circle detection**.
 
-**Why it works:**
-- All points on same line accumulate votes at same $(\theta, r)$.
-- Occlusion: points are individual voters, missing some doesn't eliminate line.
-- Noise: outliers don't get enough votes to form peaks.
+**Simple interview answer to memorize:**
+- Hough transform is a **shape detection technique**.
+- It converts edge points into a **parameter voting space**.
+- The **highest vote** in that space gives the detected line or circle.
+- It is strong for **noisy or incomplete edges**, but it can be **computationally expensive**.
 
-**Advantages:**
-- Robust to occlusion, noise, broken edges.
-- Detects multiple shapes in single pass.
-- Elegant formulation.
-
-**Disadvantages:**
-- Computationally expensive (2D or 3D accumulation).
-- Requires preprocessing (edge detection).
-- Sensitive to accumulator resolution (discretization).
-
-**Expert view:**
-Hough transform is classical but still used (autonomous driving: lane detection). Generalizations: arbitrary shapes, 3D (Hough sphere), probabilistic variants.
+**One-line memory trick:**
+- **Edge points vote, peaks win, shapes appear.**
 
 ---
 
