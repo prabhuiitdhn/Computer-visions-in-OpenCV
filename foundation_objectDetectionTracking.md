@@ -1975,4 +1975,823 @@ $\Delta m_k \in [0,1]$ — if a sampled point lands on background/noise, the net
 
 ---
 
+## Q: Bilinear Interpolation for Fractional Offsets — Ground Up Explanation
+
+### The Core Problem
+
+After computing offsets, a sampling point might land at a **fractional position** like $(3.7, 2.4)$. But feature maps only have values at **integer pixel positions** like $(3,2), (4,2), (3,3), (4,3)$.
+
+There is no pixel at $(3.7, 2.4)$. So what value do you use?
+
+**Answer: Blend the 4 nearest integer neighbors proportionally by distance.**
+
+---
+
+### Step 1: Understand the 4 Nearest Neighbors
+
+For any fractional point $p' = (x', y')$, the 4 surrounding integer positions are:
+
+$$q_1 = (\lfloor x' \rfloor,\ \lfloor y' \rfloor) \quad \text{top-left}$$
+$$q_2 = (\lfloor x' \rfloor + 1,\ \lfloor y' \rfloor) \quad \text{top-right}$$
+$$q_3 = (\lfloor x' \rfloor,\ \lfloor y' \rfloor + 1) \quad \text{bottom-left}$$
+$$q_4 = (\lfloor x' \rfloor + 1,\ \lfloor y' \rfloor + 1) \quad \text{bottom-right}$$
+
+**Concrete example:** $p' = (3.7, 2.4)$
+
+$$q_1 = (3, 2),\quad q_2 = (4, 2),\quad q_3 = (3, 3),\quad q_4 = (4, 3)$$
+
+```
+Feature map grid:
+
+  (3,2) ──────── (4,2)
+    │                │
+    │   × (3.7, 2.4) │   ← fractional point we want
+    │                │
+  (3,3) ──────── (4,3)
+```
+
+---
+
+### Step 2: Compute the Fractional Distances
+
+Let:
+$$\delta x = x' - \lfloor x' \rfloor = 3.7 - 3 = 0.7 \quad \text{(how far right from left neighbor)}$$
+$$\delta y = y' - \lfloor y' \rfloor = 2.4 - 2 = 0.4 \quad \text{(how far down from top neighbor)}$$
+
+```
+  (3,2) ←── 0.7 ──→ × ←─ 0.3 ──→ (4,2)
+                    ↑
+                   0.4
+                    ↓
+  (3,3) ←── 0.7 ──→   ←─ 0.3 ──→ (4,3)
+```
+
+The point is:
+- 70% of the way from left to right
+- 40% of the way from top to bottom
+
+---
+
+### Step 3: Compute Bilinear Weights
+
+Each neighbor gets a weight = **area of the opposite rectangle**:
+
+```
+  (3,2) ┌──────────┬────┐ (4,2)
+        │          │    │
+        │  0.3×0.6 │0.7×│
+        │  = 0.18  │0.6 │
+        │          │=0.42│
+        ├──────────┼────┤
+        │  0.3×0.4 │0.7×│
+        │  = 0.12  │0.4 │
+        │          │=0.28│
+  (3,3) └──────────┴────┘ (4,3)
+        ↑    0.3       0.7
+```
+
+| Neighbor | Weight formula | Value |
+|----------|---------------|-------|
+| $q_1=(3,2)$ top-left | $(1-\delta x)(1-\delta y)$ | $0.3 \times 0.6 = 0.18$ |
+| $q_2=(4,2)$ top-right | $\delta x \cdot (1-\delta y)$ | $0.7 \times 0.6 = 0.42$ |
+| $q_3=(3,3)$ bottom-left | $(1-\delta x) \cdot \delta y$ | $0.3 \times 0.4 = 0.12$ |
+| $q_4=(4,3)$ bottom-right | $\delta x \cdot \delta y$ | $0.7 \times 0.4 = 0.28$ |
+
+**Check: weights sum to 1:** $0.18 + 0.42 + 0.12 + 0.28 = 1.0$ ✅
+
+**Intuition:** The closer the fractional point is to a neighbor, the larger that neighbor's weight. The **opposite rectangle** grows larger the closer you are to the opposite corner.
+
+---
+
+### Step 4: Compute the Interpolated Value
+
+$$x(p') = w_1 \cdot x(q_1) + w_2 \cdot x(q_2) + w_3 \cdot x(q_3) + w_4 \cdot x(q_4)$$
+
+**Concrete numbers:**
+
+Suppose the feature map values at the 4 neighbors are:
+
+| Position | Feature value |
+|----------|--------------|
+| $(3,2)$ | 10 |
+| $(4,2)$ | 20 |
+| $(3,3)$ | 30 |
+| $(4,3)$ | 40 |
+
+$$x(3.7, 2.4) = 0.18 \times 10 + 0.42 \times 20 + 0.12 \times 30 + 0.28 \times 40$$
+$$= 1.8 + 8.4 + 3.6 + 11.2 = 25.0$$
+
+The fractional point $(3.7, 2.4)$ gets value **25.0** — a smooth blend of its neighbors.
+
+---
+
+### Why This Makes the Offsets Differentiable
+
+This is the crucial point for backpropagation. The gradient of the output with respect to the offset $\Delta p$ is:
+
+$$\frac{\partial x(p')}{\partial \Delta x} = \frac{\partial}{\partial \Delta x}\left[\sum_q G(q, p') \cdot x(q)\right]$$
+
+Since $G$ (the bilinear weight) is a continuous, differentiable function of $p'$, and $p' = p + p_k + \Delta p_k$, the gradient flows back through the interpolation to update the offset values.
+
+```
+Loss
+  ↓ backprop
+Interpolated value x(p')
+  ↓ gradient through bilinear weights G
+Offset Δp_k
+  ↓ gradient
+Offset prediction conv weights
+  ↓ update
+(offsets improve to better capture objects)
+```
+
+If the interpolation were **not differentiable** (e.g., nearest-neighbor rounding), gradients couldn't flow back and offsets couldn't be learned.
+
+---
+
+### Bilinear vs Other Interpolation Methods
+
+| Method | How | Differentiable | Quality |
+|--------|-----|---------------|---------|
+| **Nearest neighbor** | Round to closest integer | ❌ No | Blocky |
+| **Bilinear** | Weighted average of 4 neighbors | ✅ Yes | Smooth |
+| **Bicubic** | Weighted average of 16 neighbors | ✅ Yes | Smoother but slower |
+
+Bilinear is the standard in deformable convolutions — good balance of quality and speed.
+
+---
+
+**Interview-ready one-liner:**
+> "Fractional sampling positions from deformable convolution offsets are resolved via bilinear interpolation: for a point $(x', y')$, the four surrounding integer neighbors are weighted by the area of the opposite sub-rectangle — $(1-\delta x)(1-\delta y)$ for the top-left neighbor, and so on. This produces a smooth, differentiable estimate of the feature value at any continuous position, allowing gradients to flow back through the interpolation to train the offset-prediction network end-to-end."
+
+---
+
+## Q: Selective Search — Extracting ~2000 Region Proposals in R-CNN
+
+### The Core Problem Selective Search Solves
+
+Before you can classify objects, you need to answer: **"Where in the image might an object be?"**
+
+A brute-force approach would check every possible rectangle:
+
+```
+Image: 800×600
+
+Possible rectangles = all combinations of (x1,y1,x2,y2)
+≈ 800² × 600² / 4 ≈ 57 billion rectangles
+
+Classify each one with a CNN → completely infeasible
+```
+
+Selective search reduces this to **~2000 high-quality candidates** that cover most real objects.
+
+---
+
+### What Selective Search Does — Big Picture
+
+It's a **bottom-up grouping algorithm** that:
+
+1. Starts with thousands of tiny segments (oversegmentation)
+2. Repeatedly **merges similar adjacent segments**
+3. Every merged region = one region proposal
+4. Stops after ~2000 merges
+
+```
+Start:                  After merging:           Final proposals:
+
+tiny segments           medium regions           ~2000 boxes
+┌─┬─┬─┬─┬─┐           ┌───┬──┬───┐            ┌────────┐
+├─┼─┼─┼─┼─┤     →     │   │  │   │     →      │ prop 1 │
+├─┼─┼─┼─┼─┤           ├───┴──┤   │            ┌──────┐
+└─┴─┴─┴─┴─┘           │      │   │            │prop 2│
+(thousands)            └──────┴───┘            ...
+```
+
+---
+
+### Step 1: Initial Oversegmentation (Felzenszwalb's Algorithm)
+
+Selective search starts by breaking the image into **very small, fine-grained segments** — typically 1000–3000 tiny regions. Each region is roughly uniform in color/texture.
+
+```
+Input image:
+
+┌──────────────────────────────┐
+│  sky (blue)                  │
+│──────────────────────────────│
+│  tree (green)  │  building   │
+│                │  (grey)     │
+│  road (grey)   │             │
+└──────────────────────────────┘
+
+After Felzenszwalb segmentation (~2000 tiny regions):
+
+┌┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┐
+├┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┤
+├┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┼┤
+└┴┴┴┴┴┴┴┴┴┴┴┴┴┴┴┴┴┴┴┴┴┴┴┴┴┴┴┴┘
+(each cell ≈ one tiny uniform region)
+```
+
+---
+
+### Step 2: Compute Similarity Between Adjacent Regions
+
+For every pair of neighboring regions, compute a **similarity score** using 4 cues:
+
+**Cue 1: Color similarity**
+
+Compare color histograms (25 bins per channel × 3 channels = 75-dim histogram):
+
+$$s_{colour}(r_i, r_j) = \sum_{k=1}^{75} \min(c_i^k,\ c_j^k)$$
+
+High score → regions have similar color distribution → likely same object.
+
+**Cue 2: Texture similarity**
+
+Compare texture histograms (SIFT-like gradients at 8 orientations × 3 channels):
+
+$$s_{texture}(r_i, r_j) = \sum_{k=1}^{240} \min(t_i^k,\ t_j^k)$$
+
+**Cue 3: Size similarity**
+
+Prefer merging **small regions** first — prevents one large region from swallowing everything:
+
+$$s_{size}(r_i, r_j) = 1 - \frac{size(r_i) + size(r_j)}{size(\text{image})}$$
+
+**Cue 4: Fill similarity (containment)**
+
+Prefer merging regions that fit neatly into their bounding box — avoids gaps:
+
+$$s_{fill}(r_i, r_j) = 1 - \frac{size(BB_{ij}) - size(r_i) - size(r_j)}{size(\text{image})}$$
+
+Where $BB_{ij}$ = bounding box enclosing both $r_i$ and $r_j$.
+
+**Final similarity:**
+
+$$s(r_i, r_j) = a_1 s_{colour} + a_2 s_{texture} + a_3 s_{size} + a_4 s_{fill}$$
+
+---
+
+### Step 3: Greedy Merging Loop
+
+```
+While (regions remain to merge):
+  1. Find pair (r_i, r_j) with HIGHEST similarity score
+  2. Merge them into new region r_new
+  3. Compute similarity of r_new with all its neighbors
+  4. Add r_new's bounding box to proposal list
+  5. Remove r_i and r_j from similarity table
+```
+
+**Visual example:**
+
+```
+Iteration 1: Merge tiny sky patches (high color similarity)
+  [sky1] + [sky2] → [sky_region]   → add bounding box of sky_region
+
+Iteration 2: Merge adjacent road patches
+  [road1] + [road2] → [road_region] → add bounding box
+
+...
+
+Iteration 500: Merge entire car body
+  [car_top] + [car_bottom] → [car_region] → add bounding box ← THIS is a good proposal
+
+...continues until ~2000 proposals generated
+```
+
+---
+
+### Why ~2000? Not More, Not Less
+
+- Too few → miss objects (recall drops)
+- Too many → too slow for CNN classification
+- At ~2000 proposals, R-CNN achieves **~98% recall** — almost all real objects are covered by at least one proposal
+
+```
+Recall vs number of proposals (PASCAL VOC):
+
+100% ─ ─ ─ ─ ─ ─ ─ ─ ─────────────────
+ 98% ─ ─ ─ ─ ─ ─ ──
+ 90% ─ ─ ─ ───
+       │    │    │
+      500  1000  2000  proposals
+```
+
+---
+
+### What a Region Proposal Actually Is
+
+Each proposal is just a **bounding box** $(x_1, y_1, x_2, y_2)$ — it says "look here, something might be an object." It carries **no class label** — just a location.
+
+```
+R-CNN takes each proposal:
+  ┌──────────┐
+  │ proposal │  → warp to 227×227 → CNN → feature vector → SVM → "cat? dog? background?"
+  └──────────┘
+```
+
+---
+
+### Key Limitations of Selective Search (Why it was replaced)
+
+| Issue | Problem |
+|-------|---------|
+| **Speed** | ~2 seconds per image on CPU — not GPU-accelerated |
+| **Not learned** | Hand-crafted similarity rules, not trained on detection task |
+| **Fixed recall ceiling** | ~2% of real objects always missed |
+| **Replaced by RPN** | Faster R-CNN's Region Proposal Network does this in 10ms on GPU, learned end-to-end |
+
+---
+
+**Interview-ready one-liner:**
+> "Selective search is a CPU-based, bottom-up hierarchical grouping algorithm that starts with thousands of tiny oversegmented regions and greedily merges adjacent ones by a weighted combination of color, texture, size, and fill similarity — producing ~2000 bounding box proposals that achieve ~98% recall on real objects. It was the proposal mechanism in R-CNN but was replaced by the learned, GPU-accelerated Region Proposal Network in Faster R-CNN, which does the same job 200× faster and is trained end-to-end with the detector."
+
+---
+
+## Q: YOLOv4 — CSPDarknet Backbone, Mosaic Augmentation, IoU-Based Loss
+
+---
+
+## Part 1: CSPDarknet Backbone
+
+### What is a Backbone?
+
+The backbone is the CNN that processes the input image and produces feature maps. Think of it as the "eyes" of the detector — it extracts rich representations before detection heads run.
+
+### What is Darknet?
+
+Darknet is the original backbone used in YOLO models — a series of convolutional layers with residual connections (like ResNet), using **Leaky ReLU** activations and **batch normalization**.
+
+```
+Darknet53 block (used in YOLOv3):
+
+Input
+  ↓
+Conv 1×1 (reduce channels)
+  ↓
+Conv 3×3 (extract features)
+  ↓
+  + ← skip connection (residual)
+  ↓
+Output
+```
+
+### What Does CSP Add?
+
+**CSP = Cross Stage Partial Network** (Wang et al. 2019).
+
+The key idea: **split the input feature map into two parts**, process only one part through the dense block, then **concatenate both parts at the end**.
+
+```
+Standard Darknet block:            CSP Darknet block:
+
+Input (C channels)                 Input (C channels)
+  ↓                                  ↓
+Dense residual layers            ┌───┴───┐
+  ↓                              ↓       ↓
+Output                      Part 1    Part 2
+                           (C/2)     (C/2)
+                             ↓         │
+                         Dense       skip
+                         layers      (untouched)
+                             ↓         │
+                          concat ──────┘
+                             ↓
+                          1×1 Conv
+                             ↓
+                          Output (C channels)
+```
+
+**What does this achieve?**
+
+| Problem in standard Darknet | How CSP fixes it |
+|----------------------------|-----------------|
+| Gradients repeat through many layers → **gradient duplication** | Part 2 bypasses dense layers → gradients take different paths → no duplication |
+| All channels go through every layer → **high computation** | Only C/2 channels processed → ~50% less computation in dense block |
+| Feature reuse inefficient | Concatenation combines processed + unprocessed → richer features |
+
+**Numbers in YOLOv4:**
+- CSPDarknet53 = Darknet53 + CSP connections at each stage
+- ~15% faster inference than Darknet53
+- Higher accuracy due to better gradient flow
+
+---
+
+## Part 2: Mosaic Augmentation
+
+### What is Data Augmentation?
+
+Data augmentation artificially expands training data by creating modified versions of existing images — making the model more robust.
+
+### What is Mosaic Augmentation?
+
+Mosaic augmentation takes **4 training images**, crops and resizes them, and **stitches them into one 2×2 grid image**:
+
+```
+4 separate training images:
+
+ ┌──────────┐  ┌──────────┐
+ │  image1  │  │  image2  │
+ │  (cat)   │  │  (car)   │
+ └──────────┘  └──────────┘
+
+ ┌──────────┐  ┌──────────┐
+ │  image3  │  │  image4  │
+ │  (dog)   │  │  (person)│
+ └──────────┘  └──────────┘
+
+After mosaic:
+
+ ┌──────────┬──────────┐
+ │  cat     │  car     │
+ │          │          │
+ ├──────────┼──────────┤
+ │  dog     │  person  │
+ │          │          │
+ └──────────┴──────────┘
+One combined training image with 4 scenes
+```
+
+The bounding box annotations from all 4 images are **adjusted and merged** into the combined image's coordinate system.
+
+### Why is This Powerful?
+
+**Benefit 1: Forces small object detection**
+
+Each original image is shrunk to fit one quadrant — objects that were normal-sized become **small objects** in the mosaic. The model is forced to detect small objects, improving small-object mAP.
+
+```
+Normal training:  car is 400px tall
+After mosaic:     car is 200px tall (fits in half the image)
+→ model must learn to detect smaller cars
+```
+
+**Benefit 2: Increases context variety per batch**
+
+Instead of 1 scene per image, the model sees **4 different scenes simultaneously** — more diverse context per batch step.
+
+**Benefit 3: Reduces need for large batch sizes**
+
+Each mosaic image effectively encodes 4 images worth of context. A batch of 16 mosaics = exposure to 64 different scene contexts. This partially compensates for small batch sizes.
+
+**Benefit 4: Forces cross-boundary detection**
+
+Objects near the mosaic boundaries are **partially cut off** — the model must learn to detect occluded and partially visible objects.
+
+```
+┌──────────┬──────────┐
+│          │    car   │ ← car cut at boundary
+│   cat    │  (only   │
+│          │  right   │
+├──────────┼──────────┤ ← boundary
+│          │   half   │
+│   dog    │  visible)│
+└──────────┴──────────┘
+```
+
+**Benefit 5: Normalization stability**
+
+Batch normalization computes statistics over the batch. Diverse mosaic images → more representative batch statistics → more stable BN.
+
+---
+
+## Part 3: IoU-Based Loss (CIoU Loss in YOLOv4)
+
+### What Was Used Before?
+
+Earlier YOLO versions (v1, v2, v3) used **MSE (Mean Squared Error)** for bounding box regression:
+
+$$L_{box} = (x - \hat{x})^2 + (y - \hat{y})^2 + (\sqrt{w} - \sqrt{\hat{w}})^2 + (\sqrt{h} - \sqrt{\hat{h}})^2$$
+
+**Problems with MSE:**
+- Treats $x, y, w, h$ as **independent** — but they're not. A 1px error in width matters differently for a 10px box vs a 500px box
+- Not directly correlated with IoU — you can minimize MSE while IoU barely improves
+- $\sqrt{w}$ hack was needed to balance large vs small box errors — fragile
+
+### YOLOv4 Uses CIoU Loss
+
+As covered earlier, CIoU optimizes three things simultaneously:
+
+$$\mathcal{L}_{CIoU} = 1 - \text{IoU} + \frac{\rho^2(b, b^{gt})}{c^2} + \alpha v$$
+
+| Term | What it optimizes |
+|------|------------------|
+| $1 - \text{IoU}$ | Overlap area |
+| $\frac{\rho^2}{c^2}$ | Center point distance |
+| $\alpha v$ | Aspect ratio consistency |
+
+**Why "IoU-based" is better than MSE:**
+
+```
+MSE loss:                        CIoU loss:
+
+Treats x,y,w,h independently    Treats box as a whole unit
+  x error = 5px → loss = 25       IoU = 0.6 → loss = 0.4
+  (doesn't know if box is         (directly measures overlap quality)
+   10px or 500px wide)
+
+Two very different boxes         Two boxes look the same to MSE
+can have same MSE loss           but CIoU sees them differently
+```
+
+### How YOLOv4 Assigns Anchors for Loss Computation
+
+YOLOv4 uses **3 anchor sizes per scale** across 3 FPN levels (P3, P4, P5):
+
+```
+P3 (small):   anchors 10×13, 16×30, 33×23
+P4 (medium):  anchors 30×61, 62×45, 59×119
+P5 (large):   anchors 116×90, 156×198, 373×326
+
+For each GT box:
+  Find best matching anchor (highest IoU)
+  That anchor's cell is responsible for predicting the GT box
+  CIoU loss computed between that prediction and GT
+```
+
+---
+
+## Putting It All Together — Why YOLOv4 Was a Step Change
+
+```
+YOLOv4 improvements over YOLOv3:
+
+Backbone:    Darknet53 → CSPDarknet53
+             (+speed, +gradient flow)
+
+Augmentation: Random crop/flip → Mosaic
+             (+small object detection, +context diversity)
+
+Loss:        MSE → CIoU
+             (+direct IoU optimization, +center + aspect ratio)
+
+Result:      +10% mAP on COCO vs YOLOv3
+             Same inference speed
+```
+
+---
+
+**Interview-ready one-liner:**
+> "YOLOv4 introduced three key improvements: CSPDarknet splits each backbone stage's feature map into two paths — one through dense residual layers, one bypassing them — reducing gradient duplication and computation by ~50%; mosaic augmentation stitches 4 training images into one, forcing the model to detect small and occluded objects while increasing context diversity per batch; and CIoU loss replaces MSE by directly optimizing bounding box IoU, center distance, and aspect ratio simultaneously — together these gave ~10% mAP improvement over YOLOv3 at the same inference speed."
+
+---
+
+## Q: CSP — Cross Stage Partial Network, Explained from Ground Up
+
+### First: What is a "Stage" in a CNN Backbone?
+
+A deep CNN backbone like ResNet or Darknet is organized into **stages** — groups of residual blocks that operate at the same spatial resolution:
+
+```
+Darknet53 backbone stages:
+
+Input (608×608)
+  ↓
+Stage 1: 304×304  [1 residual block]
+  ↓
+Stage 2: 152×152  [2 residual blocks]
+  ↓
+Stage 3:  76×76   [8 residual blocks]
+  ↓
+Stage 4:  38×38   [8 residual blocks]
+  ↓
+Stage 5:  19×19   [4 residual blocks]
+```
+
+CSP modifies **each stage** — that's what "Cross Stage" means: the partial split happens at the boundary of each stage.
+
+---
+
+### What Happens Inside a Standard Darknet Stage
+
+A standard residual stage takes an input feature map $X$ (let's say $C$ channels) and passes it through $N$ stacked residual blocks:
+
+```
+Input X (C channels)
+  ↓
+Residual block 1
+  ↓
+Residual block 2
+  ↓
+  ...
+  ↓
+Residual block N
+  ↓
+Output (C channels)
+```
+
+Each residual block:
+
+```
+x_in ──────────────────────────────→ + → x_out
+  ↓                                  ↑
+Conv 1×1 (C → C/2)                   │
+  ↓                                  │
+Conv 3×3 (C/2 → C)                   │
+  ↓ ────────────────────────────────┘
+(learned features added to identity)
+```
+
+**Problem:** Every residual block receives gradients from ALL subsequent blocks during backprop. With N=8 blocks, the same gradient signal passes through every single block — **gradient information is duplicated and diluted**.
+
+```
+Backprop through standard stage (N=4 for simplicity):
+
+Loss
+  ↓
+Block 4 ← gets gradient
+  ↓
+Block 3 ← gets gradient (includes block 4's gradient)
+  ↓
+Block 2 ← gets gradient (includes blocks 3+4's gradients)
+  ↓
+Block 1 ← gets gradient (includes blocks 2+3+4's gradients)
+  ↓
+Input   ← receives ALL accumulated gradients — very noisy, duplicated
+```
+
+---
+
+### The CSP Idea: Split, Process Half, Concatenate
+
+CSP takes the input $X$ and **splits it into two equal halves along the channel dimension**:
+
+$$X \in \mathbb{R}^{H \times W \times C} \rightarrow X_1 \in \mathbb{R}^{H \times W \times C/2}, \quad X_2 \in \mathbb{R}^{H \times W \times C/2}$$
+
+```
+Input X (C channels)
+        ↓
+   ┌────┴────┐
+   ↓         ↓
+  X_1       X_2
+(C/2 ch)  (C/2 ch)
+   ↓         │
+Dense        │  ← X_2 takes a DIRECT SKIP — no processing
+residual     │
+blocks       │
+(on X_1      │
+ only)       │
+   ↓         │
+  concat ────┘
+   ↓
+1×1 Conv (fuse channels)
+   ↓
+Output (C channels)
+```
+
+---
+
+### Deep Dive: What Each Path Does
+
+**Path 1 (X_1 — the "partial" path):**
+
+Goes through all N residual blocks normally:
+
+```
+X_1 (C/2 channels)
+  ↓
+Residual block 1
+  ↓
+Residual block 2
+  ↓
+  ...
+  ↓
+Residual block N
+  ↓
+X_1_processed (C/2 channels)
+```
+
+This path learns **high-level semantic features** through deep processing.
+
+**Path 2 (X_2 — the "skip" path):**
+
+Goes directly to the concatenation — **zero processing**:
+
+```
+X_2 (C/2 channels) ──────────────────────→ X_2 (C/2 channels)
+(untouched — same as input)
+```
+
+This path preserves **raw low-level features** from the input.
+
+**Concatenation + Fusion:**
+
+```
+[X_1_processed | X_2]   ← concatenate along channel dim
+       ↓                   (C/2 + C/2 = C channels)
+  1×1 Conv                 ← fuse the two streams
+       ↓
+   Output (C channels)
+```
+
+---
+
+### Why This Fixes Gradient Duplication
+
+The gradient now takes **two distinct paths** back to the input:
+
+```
+Backprop in CSP stage:
+
+Loss
+  ↓ 
+concat/1×1 conv
+  ↓               ↓
+Path 1           Path 2
+(through all     (direct skip —
+ N residual       gradient flows
+ blocks)          straight through)
+  ↓               ↓
+X_1 gradient   X_2 gradient
+  ↓               ↓
+  └───── input ───┘
+         ↑
+  Two DIFFERENT gradient signals
+  (not duplicated copies of the same one)
+```
+
+The residual blocks in Path 1 only receive gradient from **their own path** — they are no longer contaminated by Path 2's gradient. This is "cross stage partial" — the gradient is **partially** separated across the stage boundary.
+
+---
+
+### Concrete Computation Savings
+
+Without CSP (standard Darknet53 stage 3: 8 residual blocks, 256 channels):
+
+```
+All 256 channels × 8 blocks:
+  FLOPs ≈ 8 × 2 × (256 × 128 × 76 × 76) = very large
+```
+
+With CSPDarknet53 (same stage):
+
+```
+Only 128 channels (half) × 8 blocks:
+  FLOPs ≈ 8 × 2 × (128 × 64 × 76 × 76) = ~50% of above
+
+Plus lightweight 1×1 conv for fusion: negligible
+```
+
+**Net result: ~50% reduction in FLOPs inside each dense stage.**
+
+---
+
+### What "Dense Block" Means Here
+
+In CSPNet, the residual blocks inside Path 1 can be standard residual blocks (as in CSPDarknet) or DenseNet-style dense connections (as in the original CSP paper). In YOLOv4 specifically, they are **standard Darknet residual blocks** — the "dense" just means "the main processing path."
+
+---
+
+### Full CSPDarknet53 Stage (YOLOv4)
+
+```
+Input: H × W × C
+  ↓
+Conv 3×3, stride=2  ← downsample (this happens before the CSP split)
+  ↓
+Input to CSP: H/2 × W/2 × 2C
+  ↓
+┌────────────────────────────────────────┐
+│ CSP block:                             │
+│                                        │
+│  ┌──── Conv 1×1 ──→ C channels ──┐    │
+│  │                                ↓    │
+│  │                         N residual  │
+│  │                         blocks      │
+│  │                                ↓    │
+│  │                         Conv 1×1    │
+│  │                                ↓    │
+│  └──── Conv 1×1 ──→ C channels ──┤    │
+│                                   ↓    │
+│                              Concat    │
+│                                   ↓    │
+│                         BN + LeakyReLU │
+│                                   ↓    │
+│                              Conv 1×1  │
+└────────────────────────────────────────┘
+  ↓
+Output: H/2 × W/2 × 2C
+```
+
+---
+
+### Summary: What CSP Gives You
+
+| Property | Standard Darknet | CSPDarknet |
+|----------|-----------------|------------|
+| Gradient duplication | High — all channels share same gradient path | Low — two separate gradient paths |
+| FLOPs in dense stage | C channels × N blocks | C/2 channels × N blocks (~50% less) |
+| Feature richness | Only processed features | Processed + raw features concatenated |
+| Speed | Baseline | ~15% faster inference |
+| Accuracy | Baseline | Equal or better (better gradient flow) |
+
+---
+
+**Interview-ready one-liner:**
+> "CSP splits each backbone stage's input feature map into two halves along the channel dimension — one half goes through all N residual blocks (learning deep features), the other bypasses them entirely as a skip connection. They're concatenated and fused with a 1×1 conv at the end. This eliminates gradient duplication because backprop now travels two distinct paths, and cuts FLOPs in the dense stage by ~50% since only half the channels are processed — giving YOLOv4 faster inference with equal or better accuracy than standard Darknet53."
+
+---
+
 *End of notes — continued in next session.*
