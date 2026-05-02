@@ -1432,4 +1432,912 @@ The result: U-Net is arguably the most widely adopted architecture in medical im
 
 ---
 
+## Anisotropic Kernels: When Slice Spacing ≠ Pixel Spacing
+
+---
+
+### The Problem: Medical Volumes Are Not Isotropic
+
+In natural images, every pixel represents the same physical size. A pixel is a pixel.
+
+In medical imaging, this is **often not true**. The spatial resolution differs between the in-plane directions (H, W) and the through-plane direction (D/depth/slice axis):
+
+```
+CT scan example:
+  In-plane pixel spacing:   0.5 mm × 0.5 mm   (fine — detector resolution)
+  Slice thickness:          5.0 mm             (coarse — patient movement, dose limits)
+
+So one "voxel" physically represents:
+  0.5 mm × 0.5 mm × 5.0 mm   ← a tall, thin slab, not a cube
+```
+
+This means adjacent slices (depth neighbors) are **10× further apart** in physical space than adjacent pixels within a slice.
+
+---
+
+### Why This Breaks a Cubic [3×3×3] Kernel
+
+A standard 3×3×3 kernel assumes all 3 axes are equally spaced — it treats depth neighbors and in-plane neighbors as equally "close":
+
+```
+[3×3×3] kernel neighborhood:
+
+      Slice z-1       Slice z        Slice z+1
+   ┌───────────┐  ┌───────────┐  ┌───────────┐
+   │  x x x   │  │  x x x   │  │  x x x   │
+   │  x x x   │  │  x C x   │  │  x x x   │  C = center voxel
+   │  x x x   │  │  x x x   │  │  x x x   │
+   └───────────┘  └───────────┘  └───────────┘
+
+This kernel says: "the 8 neighbors in slice z±1 are just as
+relevant as the 8 neighbors within slice z"
+```
+
+But physically, the neighbors in slice z±1 are 5 mm away, while in-plane neighbors are only 0.5 mm away. The kernel is **mixing features from very different physical scales** — it's like treating a neighbor 1 meter away the same as a neighbor 10 meters away.
+
+Consequences:
+1. **Blurring across slices** — fine structures that fit within a single slice get smeared across adjacent slices
+2. **Wasted parameters** — the depth-direction kernels are learning relationships between voxels that aren't spatially coherent
+3. **Boundary artifacts** — object boundaries that are sharp within a slice appear diffuse in the depth direction
+
+---
+
+### The Fix: Anisotropic Kernels Match the Physical Anisotropy
+
+**Option A: [1×3×3] kernel** — operates only within a single slice
+
+```
+[1×3×3] kernel — no depth dimension at all:
+
+      Slice z-1       Slice z        Slice z+1
+   ┌───────────┐  ┌───────────┐  ┌───────────┐
+   │           │  │  x x x   │  │           │
+   │  (empty)  │  │  x C x   │  │  (empty)  │  ← only current slice
+   │           │  │  x x x   │  │           │
+   └───────────┘  └───────────┘  └───────────┘
+
+Depth neighbors: ignored entirely
+In-plane neighbors: full 3×3 neighborhood
+```
+
+Use this when slices are very thick and essentially independent. Each slice is processed as if it's 2D. You get the full spatial reasoning within each slice without any cross-slice contamination.
+
+---
+
+**Option B: Pseudo-3D — [1×3×3] + [3×1×1] in sequence**
+
+```
+Instead of one [3×3×3] kernel, use two kernels in sequence:
+
+Step 1: [1×3×3]  — learn in-plane features (fine resolution)
+Step 2: [3×1×1]  — learn cross-slice features (coarse resolution)
+
+This is called "pseudo-3D" or "anisotropic factorization"
+```
+
+---
+
+### Numerical Intuition
+
+Imagine a lung nodule in a CT scan:
+
+```
+Physical extent of a 5mm nodule:
+  In-plane:  5mm / 0.5mm = 10 pixels diameter  (well-resolved)
+  Depth:     5mm / 5.0mm = 1 slice thickness    (barely 1 voxel)
+```
+
+With a cubic [3×3×3] kernel:
+- The depth receptive field covers 3 × 5mm = **15mm** of real tissue
+- The in-plane receptive field covers 3 × 0.5mm = **1.5mm** of real tissue
+- The kernel is looking at a 15mm depth range to inform a 1.5mm spatial prediction — wildly mismatched
+
+With [1×3×3]:
+- Depth receptive field: **0mm** (stays within one slice)
+- In-plane receptive field: **1.5mm** — appropriate for fine in-plane detail
+
+---
+
+### Pooling Is Affected Too
+
+The same logic applies to max pooling and transposed convolution:
+
+```
+Isotropic (voxel spacing ≈ equal):
+  MaxPool3D(2, 2, 2) — halve all three axes equally
+
+Anisotropic (slices much thicker):
+  MaxPool3D(1, 2, 2) — only halve H and W, leave D alone
+
+  Why? If you halve D when slices are already thick, you lose
+  the small amount of depth information you have entirely.
+  Better to preserve depth resolution and only compress
+  the fine in-plane axes.
+```
+
+The encoder then gradually starts pooling the depth axis only once the in-plane resolution has been reduced enough that the relative anisotropy decreases:
+
+```
+Stage 1 pool: (1, 2, 2)  → [D × H/2 × W/2]
+Stage 2 pool: (1, 2, 2)  → [D × H/4 × W/4]
+Stage 3 pool: (2, 2, 2)  → [D/2 × H/8 × W/8]   ← depth pooling starts here
+```
+
+---
+
+### How nnU-Net Handles This Automatically
+
+nnU-Net computes the voxel spacing from the dataset metadata and automatically selects kernel shapes:
+
+```python
+# Pseudocode of nnU-Net's kernel selection logic:
+
+if max_spacing / min_spacing > 2:
+    # Anisotropic dataset
+    kernel = [1, 3, 3]
+    pool_kernel = [1, 2, 2]   # don't pool depth axis yet
+else:
+    # Isotropic dataset
+    kernel = [3, 3, 3]
+    pool_kernel = [2, 2, 2]   # pool all axes equally
+```
+
+This is why nnU-Net achieves state-of-the-art results out-of-the-box — it respects the physical geometry of the data.
+
+---
+
+### Summary Table
+
+| Scenario | Physical spacing | Kernel choice | Reason |
+|---|---|---|---|
+| Isotropic MRI (1×1×1 mm) | Equal all axes | [3×3×3] | All neighbors equally relevant |
+| CT with thick slices (0.5×0.5×5 mm) | Depth 10× coarser | [1×3×3] or [1×3×3]+[3×1×1] | Depth neighbors are far away |
+| Ultrasound (1×1×2 mm) | Slightly anisotropic | [3×3×3] or mild anisotropic | Small difference, cubic usually fine |
+| Histology stack (0.25×0.25×10 mm) | Depth 40× coarser | [1×3×3] strictly | Slices essentially independent |
+
+---
+
+**Interview one-liner:**
+> Medical volumes are physically anisotropic — in-plane pixels may be 0.5 mm apart while slices are 5 mm apart, so a cubic [3×3×3] kernel treats spatially distant depth-neighbors as equally relevant as close in-plane neighbors. Anisotropic kernels like [1×3×3] restrict convolution to axes where voxels are actually spatially coherent, preventing cross-scale feature blending and matching the kernel's receptive field to the real-world geometry of the data.
+
+---
+
+## U-Net for Satellite Image Analysis
+
+---
+
+### Why Satellite Imagery is a Natural Fit for U-Net
+
+Satellite images share the core challenge that U-Net was designed to solve: **dense, pixel-level prediction over large spatial areas where both fine detail and broad context matter simultaneously**.
+
+```
+Satellite image characteristics:
+  - Very high resolution: 0.3m–30m per pixel (WorldView-3 to Landsat)
+  - Multi-spectral: RGB + NIR + SWIR + thermal bands (4–13 channels)
+  - Large image size: 10,000×10,000+ pixels per tile
+  - Objects of interest: roads (1–5px wide), buildings (10–100px), forests (millions of px)
+  - All require: "what is each pixel?" — exactly what U-Net does
+```
+
+---
+
+### Core Satellite Segmentation Tasks
+
+#### Task 1: Building Footprint Detection
+
+```
+Input: RGB aerial/satellite image
+
+Target output (per pixel):
+  0 = background / road / vegetation
+  1 = building footprint
+
+Challenge: buildings touch each other, share walls, vary in size
+from 3×3 px (shed) to 500×500 px (warehouse)
+```
+
+U-Net's multi-scale skip connections handle this naturally:
+- **Coarse features** (bottleneck): "this is a dense urban area"
+- **Fine features** (early encoder): "this specific edge at pixel (i,j) is a wall"
+
+A single-scale model misses either the urban context or the fine boundary.
+
+---
+
+#### Task 2: Road Network Extraction
+
+Roads are among the hardest satellite targets:
+
+```
+Challenge: roads are thin (1–5px wide in high-res imagery)
+but can span thousands of pixels in length
+
+Standard convnet:
+  After 4× MaxPool → feature map is 1/16 size
+  A 3px road → 0.19px in feature space → VANISHES
+
+U-Net fix:
+  Skip connection from stage 1 (before pooling) carries
+  the full-resolution road pixels directly to the decoder
+  → thin structures survive the encoder's spatial compression
+```
+
+Additional technique: **binary cross-entropy + distance transform weighting** — pixels near road centerlines get higher loss weight so the network learns precise centerlines rather than blurry blobs.
+
+---
+
+#### Task 3: Land Cover / Land Use Classification
+
+```
+Classes: water, forest, cropland, urban, bare soil, snow/ice
+
+Multi-class per-pixel prediction:
+  Input:  [H × W × 13]  (Sentinel-2 has 13 spectral bands)
+  Output: [H × W × 6]   (6 land cover classes, softmax)
+
+U-Net advantage: captures both
+  - Local texture (forest texture vs cropland texture) — fine features
+  - Regional context (river valley vs plateau) — coarse features
+```
+
+---
+
+#### Task 4: Change Detection
+
+Two images of the same location at different times → predict which pixels changed:
+
+```
+Input:  Image_t1 [H × W × C]  +  Image_t2 [H × W × C]
+Output: Change mask [H × W × 1]  (0=no change, 1=change)
+
+Siamese U-Net architecture:
+  Encoder_t1  (shared weights)  →  features_t1
+  Encoder_t2  (shared weights)  →  features_t2
+                                        ↓
+               Difference or concat at each skip level
+                                        ↓
+                          Shared decoder → change map
+```
+
+Sharing encoder weights forces the model to extract comparable features from both time points. Skip connections carry fine temporal differences (a new building's exact edge) alongside broad contextual change signals.
+
+---
+
+### Satellite-Specific Challenges and U-Net Adaptations
+
+#### Challenge 1: Images Are Too Large to Process Whole
+
+A 10,000×10,000 satellite image at float32 with 13 bands = **5.2 GB** just for the input. U-Net cannot process this in one pass.
+
+**Solution: Sliding window with overlap-tile strategy** (from the original U-Net paper):
+
+```
+Tile the image into overlapping patches:
+
+┌──────┬──────┬──────┐
+│  P1  │  P2  │  P3  │
+├──────┼──────┼──────┤   Each patch: 512×512 px
+│  P4  │  P5  │  P6  │   Overlap: 64px on each side
+├──────┼──────┼──────┤
+│  P7  │  P8  │  P9  │
+└──────┴──────┴──────┘
+
+Process each patch → predictions
+Stitch predictions → discard border overlap (border predictions
+are less reliable due to missing context at patch edges)
+```
+
+The overlap ensures that even pixels at patch boundaries have full local context from both neighboring patches.
+
+---
+
+#### Challenge 2: Multi-Spectral Input (More Than 3 Channels)
+
+Standard U-Net uses RGB (3 channels). Satellite sensors provide many more:
+
+```
+Sentinel-2 bands:
+  Band 2 (Blue):    490nm
+  Band 3 (Green):   560nm
+  Band 4 (Red):     665nm
+  Band 8 (NIR):     842nm   ← vegetation health
+  Band 11 (SWIR):   1610nm  ← moisture, soil
+  Band 12 (SWIR2):  2190nm  ← mineral discrimination
+  ... (13 bands total)
+
+Derived indices often added as extra channels:
+  NDVI = (NIR - Red) / (NIR + Red)   ← vegetation index
+  NDWI = (Green - NIR) / (Green + NIR)  ← water index
+```
+
+U-Net handles this trivially — the first conv layer just changes from 3 input channels to N:
+
+```python
+# Standard U-Net first conv:
+Conv2d(in_channels=3,  out_channels=64, kernel_size=3)
+
+# Satellite U-Net first conv:
+Conv2d(in_channels=13, out_channels=64, kernel_size=3)  # same architecture
+```
+
+The network learns which spectral bands are informative for each class entirely from data.
+
+---
+
+#### Challenge 3: Class Imbalance is Severe
+
+```
+Typical land cover distribution in a satellite scene:
+  Forest:      45%
+  Cropland:    30%
+  Water:       12%
+  Urban:        8%
+  Buildings:    3%
+  Roads:        2%
+```
+
+Roads and buildings (most commercially important) are rare. Solutions:
+
+1. **Weighted cross-entropy**: rare classes get higher loss multiplier
+$$\mathcal{L} = -\sum_c w_c \cdot y_c \log(\hat{y}_c)$$
+where $w_c \propto 1/\text{frequency}_c$
+
+2. **Dice loss**: directly optimizes overlap, inherently balances classes
+$$\mathcal{L}_{Dice} = 1 - \frac{2 \sum y \cdot \hat{y}}{\sum y + \sum \hat{y}}$$
+
+3. **Focal loss** (widely adopted for satellite):
+$$\mathcal{L}_{focal} = -\alpha_t (1-p_t)^\gamma \log(p_t)$$
+Down-weights easy background pixels, focuses training on hard road/building pixels
+
+---
+
+#### Challenge 4: Varying Spatial Resolution Across Sensors
+
+```
+Sensor          GSD        Typical use
+──────          ───        ───────────
+WorldView-3     0.3m       Building footprints, fine detail
+Pleiades        0.5m       Urban mapping
+Sentinel-2      10m        Land cover, agriculture
+Landsat-8       30m        Regional vegetation, water bodies
+MODIS           250m–1km   Global monitoring
+```
+
+The same model architecture works across sensors — **transfer learning + fine-tuning** is standard: pre-train on high-data sensor, fine-tune on target sensor.
+
+---
+
+#### Challenge 5: Temporal and Seasonal Variation
+
+A forest in summer vs winter looks completely different spectrally. Solutions:
+1. **Spectral jitter augmentation** — randomly perturb band values during training
+2. **Multi-temporal U-Net** — stack images from multiple dates as extra channels
+3. **ConvLSTM decoder** — process a time series, decoder uses recurrent connections
+
+---
+
+### Benchmark Datasets for Satellite U-Net
+
+| Dataset | Task | GSD |
+|---|---|---|
+| SpaceNet (1–8) | Building footprints, roads | 0.3m–0.5m |
+| ISPRS Vaihingen/Potsdam | Urban land cover | 0.05m–0.09m |
+| DeepGlobe | Road, building, land cover | 0.5m |
+| iSAID | Instance segmentation | Various |
+| BigEarthNet | Multi-label land cover (Sentinel-2) | 10m |
+
+U-Net and its variants (ResU-Net, Attention U-Net, TransUNet) consistently top leaderboards on all of these.
+
+---
+
+### Why U-Net Specifically (vs Generic Segmentation Models)
+
+| Property | Why it matters for satellite |
+|---|---|
+| No FC layers | Works on arbitrary image sizes — critical for large tiles |
+| Skip connections at every level | Thin roads (fine) + land cover regions (coarse) both need attention |
+| Lightweight — trains on limited labels | Satellite labels are expensive |
+| Easily extended to N input channels | Multi-spectral bands drop in without architecture changes |
+| Tiling-friendly | Overlap-tile strategy works out-of-box |
+
+---
+
+**Interview one-liner:**
+> Satellite imagery demands exactly what U-Net delivers — per-pixel labels over large scenes where thin roads (1–3px) and vast forests coexist. U-Net's multi-scale skip connections preserve fine linear structures while coarse encoder features capture regional land cover context, and the fully convolutional design handles arbitrary-size tiles from any multi-spectral sensor without architecture changes.
+
+---
+
+## Mask R-CNN: Two-Stage Instance Segmentation
+
+---
+
+### Starting Point: What Faster R-CNN Does
+
+To understand Mask R-CNN, you must first understand what it extends. Faster R-CNN produces **bounding boxes + class labels** for each detected object in two stages:
+
+```
+Stage 1 — Region Proposal Network (RPN):
+  Input image → CNN backbone → feature map
+  RPN slides over feature map → proposes ~2000 candidate boxes
+  ("something is here" — class-agnostic)
+
+Stage 2 — Detection Head:
+  For each proposal → crop the feature map → classify + refine box
+  Output: [class_label, x1, y1, x2, y2] per object
+```
+
+Mask R-CNN asks: **what if we added a third output — a pixel mask — alongside the box and class label?**
+
+---
+
+### The Mask R-CNN Architecture
+
+```
+                    ┌─────────────────────────────────────────┐
+                    │           Backbone + FPN                │
+                    │  (ResNet-50/101 + Feature Pyramid Net)  │
+                    └──────────────┬──────────────────────────┘
+                                   │ feature maps (multi-scale)
+                    ┌──────────────▼──────────────┐
+                    │    Region Proposal Network   │
+                    │  → ~2000 region proposals    │
+                    └──────────────┬──────────────┘
+                                   │ top-K proposals (e.g., 300)
+                    ┌──────────────▼──────────────┐
+                    │         RoIAlign             │  ← KEY upgrade from Faster R-CNN
+                    │  crops + aligns feature map  │
+                    │  to fixed 7×7 or 14×14 grid  │
+                    └──────┬───────────┬──────────┘
+                           │           │
+              ┌────────────▼──┐   ┌────▼────────────┐
+              │  Box Head      │   │   Mask Head      │
+              │  FC layers     │   │   Conv layers    │
+              │  → class score │   │  → binary mask   │
+              │  → box offset  │   │  [28×28 per obj] │
+              └────────────────┘   └─────────────────┘
+```
+
+Three parallel output heads, all running on the same RoIAlign feature crop:
+1. **Classification**: what class is this object?
+2. **Box regression**: refine the bounding box coordinates
+3. **Mask prediction**: predict a pixel-level binary mask for this object
+
+---
+
+### Stage 1: Backbone + FPN
+
+Mask R-CNN uses **Feature Pyramid Network (FPN)** on top of ResNet:
+
+```
+ResNet stages:         Feature maps:       FPN output:
+                                           (multi-scale)
+Input image
+    ↓
+  C1 [H/2]
+  C2 [H/4]   ─────────────────────────→  P2 [H/4,  256ch]  ← fine detail
+  C3 [H/8]   ─────────────────────────→  P3 [H/8,  256ch]
+  C4 [H/16]  ─────────────────────────→  P4 [H/16, 256ch]
+  C5 [H/32]  ─────────────────────────→  P5 [H/32, 256ch]  ← coarse semantics
+                          ↑
+               top-down pathway: upsample
+               and add lateral connections
+```
+
+Each proposal is assigned to the FPN level based on its size:
+
+$$k = k_0 + \lfloor \log_2(\sqrt{wh} / 224) \rfloor$$
+
+where $k_0 = 4$, $w$ and $h$ are proposal width and height.
+
+---
+
+### Stage 2: RoIAlign — The Critical Upgrade
+
+#### The RoIPool Quantization Problem
+
+Faster R-CNN uses **RoIPool** which rounds coordinates to integer grid positions:
+
+```
+Proposal box in image space: [x1=12.3, y1=5.7, x2=47.8, y2=38.2]
+
+Step 1 — map to feature space (stride=16):
+  x1 = floor(12.3/16) = floor(0.77) = 0   ← QUANTIZATION ERROR
+  y1 = floor(5.7/16)  = floor(0.36) = 0
+  x2 = floor(47.8/16) = floor(2.99) = 2
+  y2 = floor(38.2/16) = floor(2.39) = 2
+
+Problem: the floor() rounding misaligns the feature crop from the
+actual proposal location.
+```
+
+For **bounding box detection**, small misalignment doesn't matter much. For **pixel-level masks**, it's catastrophic — a 1-pixel misalignment at stride 16 = a 16-pixel error in image space.
+
+---
+
+#### RoIAlign: Bilinear Interpolation, No Quantization
+
+RoIAlign **never quantizes**. It keeps all coordinates as floating-point and uses bilinear interpolation to sample feature values:
+
+```
+Within each bin, sample at 4 fixed points (2×2 sampling grid):
+  Sample point at (1.1, 0.7) → bilinear interpolation from
+  the 4 surrounding feature map pixels
+
+  value = w_tl * f[0,0] + w_tr * f[0,1]
+        + w_bl * f[1,0] + w_br * f[1,1]
+
+  where weights w = (1-dx)(1-dy), (1-dx)dy, dx(1-dy), dx·dy
+  and dx, dy are fractional distances to integer grid points
+```
+
+```
+Feature map (integer grid):
+
+  ·    ·    ·    ·
+
+  ·    ·    ·    ·
+       ×              ← sample point at (1.3, 1.7) — NOT on integer grid
+  ·    ·    ·    ·    ← bilinear interpolation from surrounding 4 pixels
+
+  ·    ·    ·    ·
+```
+
+Result: **exact, sub-pixel accurate feature extraction** — the cropped feature map is perfectly aligned with the proposal location.
+
+---
+
+### Stage 2: The Mask Head
+
+After RoIAlign produces a 14×14 feature crop per proposal:
+
+```
+RoIAlign output: [14×14×256]  (per proposal)
+     ↓
+Conv 3×3, 256ch  → ReLU
+Conv 3×3, 256ch  → ReLU
+Conv 3×3, 256ch  → ReLU
+Conv 3×3, 256ch  → ReLU   (4 conv layers)
+     ↓
+TranspConv 2×2, stride=2  → upsample to [28×28×256]
+     ↓
+Conv 1×1, num_classes     → [28×28×K]  (K binary masks, one per class)
+     ↓
+Sigmoid activation        → [28×28×K] ∈ [0,1]
+```
+
+**Key design decision: K independent binary masks, not a single K-class softmax.**
+
+Why? Decouples mask prediction from classification. The mask head just asks "is this pixel part of the object?" for each class independently. The class label comes from the box head. At inference: use the predicted class to select which of the K masks to output.
+
+---
+
+### Training: Multi-Task Loss
+
+$$\mathcal{L} = \mathcal{L}_{cls} + \mathcal{L}_{box} + \mathcal{L}_{mask}$$
+
+- $\mathcal{L}_{cls}$ — cross-entropy over class predictions
+- $\mathcal{L}_{box}$ — smooth L1 loss on box coordinate regression
+- $\mathcal{L}_{mask}$ — average binary cross-entropy over the 28×28 mask, computed **only for the ground-truth class**:
+
+$$\mathcal{L}_{mask} = -\frac{1}{28^2} \sum_{i,j} \left[ y_{ij} \log \hat{m}_{ij}^k + (1-y_{ij}) \log(1 - \hat{m}_{ij}^k) \right]$$
+
+where $k$ = ground-truth class, $y_{ij} \in \{0,1\}$ = ground-truth mask pixel.
+
+Only **foreground proposals** (IoU > 0.5 with a GT box) contribute to mask loss.
+
+---
+
+### Why Two Stages? What Does Each Stage Buy?
+
+```
+Stage 1 (RPN):
+  - Finds WHERE objects are (rough localization)
+  - Class-agnostic — just "something is here"
+  - Filters out 99% of image as background
+  - Gives Stage 2 a manageable set of good candidates
+
+Stage 2 (Detection + Mask heads):
+  - Classifies WHAT each candidate is
+  - Precisely localizes the box
+  - Predicts fine-grained mask within the box
+
+Why not one stage?
+  One-stage models (YOLO, SSD) struggle with accurate masks
+  because they never have a refined, class-specific crop to
+  predict the mask from. The two-stage refinement gives the
+  mask head a well-localized, properly-sized feature region.
+```
+
+---
+
+### High Accuracy vs Slower Inference
+
+| Metric | Mask R-CNN | One-stage (e.g., YOLACT) |
+|---|---|---|
+| COCO mask AP | ~37–39% | ~29–31% |
+| Inference speed | ~5 FPS (ResNet-101) | ~30+ FPS |
+| Small object accuracy | High (FPN helps) | Lower |
+| Mask quality | Sharp, well-aligned | Coarser |
+| Why slower | Two forward passes + RoIAlign per proposal | Single pass, no per-proposal ops |
+
+**Optimizations used in practice:** reduce proposals to 300 at test time, FP16 inference, TensorRT, smaller backbone (ResNet-50).
+
+---
+
+### Mask R-CNN Variants and Extensions
+
+| Variant | What it adds |
+|---|---|
+| **Mask R-CNN + keypoints** | Third head predicts 17 human keypoints — same RoIAlign crop |
+| **PANet** | Bottom-up pathway added to FPN, improves small object masks |
+| **Cascade Mask R-CNN** | Three sequential refinement stages with increasing IoU thresholds |
+| **HTC** (Hybrid Task Cascade) | Interleaves detection and segmentation heads, feeds mask features back |
+| **PointRend** | Iterative point-based mask rendering — much sharper boundaries |
+
+---
+
+**Interview one-liner:**
+> Mask R-CNN extends Faster R-CNN by adding a parallel fully-convolutional mask head that runs on RoIAlign-extracted crops — RoIAlign's bilinear interpolation eliminates the quantization misalignment of RoIPool, giving pixel-accurate mask predictions, while K independent binary masks per class decouple segmentation from classification, letting each head specialize. The two-stage design (RPN → refine) gives the mask head a well-localized crop to work from, which is why it achieves higher mask accuracy than one-stage approaches at the cost of per-proposal computation.
+
+---
+
+## YOLACT: One-Stage Instance Segmentation via Linear Mask Assembly
+
+---
+
+### The Core Problem YOLACT Solves
+
+Mask R-CNN is accurate but slow because it runs a **separate mask head for every proposed object**. For 300 proposals, you run 300 forward passes through the mask head.
+
+YOLACT's key insight: **don't predict masks directly per object — factor mask prediction into two globally cheap operations that compose together**.
+
+The idea is borrowed from signal processing: any complex signal can be approximated as a **linear combination of basis functions**. YOLACT applies this to masks:
+
+```
+Instance mask = c₁ · P₁ + c₂ · P₂ + c₃ · P₃ + ... + cₖ · Pₖ
+
+where:
+  Pᵢ = prototype masks (basis functions, shared across all instances)
+  cᵢ = mask coefficients (per-object weights, predicted per detection)
+```
+
+Generate the prototypes **once** for the whole image. Predict coefficients **per object** (cheap — just K numbers per box). Assemble masks via matrix multiply. Done.
+
+---
+
+### Step 1: Prototype Masks — The Shared Basis
+
+A **prototype mask** is a full-resolution soft mask that encodes some spatial pattern. They are not tied to any specific object or class — they are reusable spatial "templates".
+
+```
+Prototype mask examples (conceptual):
+
+P₁: high values on left half of image
+  ████████░░░░░░░░
+  ████████░░░░░░░░
+  ████████░░░░░░░░
+
+P₂: high values in center
+  ░░░░░░░░░░░░░░░░
+  ░░░░████████░░░░
+  ░░░░░░░░░░░░░░░░
+
+P₃: high values on right, bottom
+  ░░░░░░░░░░░░░░░░
+  ░░░░░░░░████████
+  ░░░░░░░░████████
+
+P₄: diagonal gradient
+  ████░░░░░░░░░░░░
+  ░░████░░░░░░░░░░
+  ░░░░████░░░░░░░░
+```
+
+These are **learned** — not hand-designed. The network discovers what spatial patterns are most useful as bases for reconstructing instance masks on the training set.
+
+---
+
+### How Prototypes Are Generated: The Protonet
+
+A small FCN (called **Protonet**) runs once on the full image and outputs K prototype masks:
+
+```
+Input image [H × W × 3]
+      ↓
+  FPN backbone (shared with detection head)
+      ↓
+  Protonet (FCN, runs on P3 — finest FPN level):
+    Conv 3×3, 256ch → ReLU
+    Conv 3×3, 256ch → ReLU
+    Conv 3×3, 256ch → ReLU
+    TranspConv 2× upsample
+    Conv 1×1, K channels  (K = 32 in YOLACT)
+      ↓
+  Output: [H/4 × W/4 × K]   (prototype maps at 1/4 image resolution)
+```
+
+K = 32 prototypes is enough. **Crucially: this runs ONCE per image, not once per object.** Cost is O(1) regardless of how many objects are in the scene.
+
+---
+
+### Step 2: Mask Coefficients — Per-Object Weights
+
+YOLACT builds on a one-stage detector (specifically **RetinaNet** with FPN). The detection head predicts, for each anchor:
+
+```
+Standard detection outputs (per anchor):
+  - Class score (C values)
+  - Box offset (4 values: Δx, Δy, Δw, Δh)
+
+YOLACT adds:
+  - Mask coefficients (K values: c₁, c₂, ..., cₖ)  ← new head
+```
+
+The K coefficients are passed through **tanh** (not sigmoid or softmax):
+
+```python
+coefficients = tanh(raw_coeff_output)   # ∈ [-1, +1] per coefficient
+```
+
+Why tanh? Masks need **signed** combinations — some prototypes might need to be *subtracted* to carve out precise object boundaries. A sigmoid would restrict to positive combinations only, losing expressiveness.
+
+---
+
+### Step 3: Mask Assembly — Linear Combination
+
+After NMS selects the final detections, mask assembly is a single matrix multiply:
+
+```
+Let:
+  P = prototype matrix   [H/4 × W/4 × K]   (one set for the whole image)
+  C = coefficient matrix [N × K]            (N = number of detected objects)
+
+Assembly:
+  M = sigmoid(P · Cᵀ)   [H/4 × W/4 × N]
+
+where:
+  P · Cᵀ  =  matrix multiply  →  [H/4 × W/4 × N]
+  sigmoid →  soft mask per instance ∈ [0,1]
+  threshold at 0.5 → binary mask
+
+Final step: crop M to each object's predicted bounding box
+  (removes false positives outside the box region)
+```
+
+Visualized:
+
+```
+Prototype P₁ [H×W]:   ████░░░░   (left-biased)
+Prototype P₂ [H×W]:   ░░░░████   (right-biased)
+Prototype P₃ [H×W]:   ░░████░░   (center)
+
+Object A coefficients: [+0.8, -0.2, +0.5]
+
+Mask_A = sigmoid(0.8·P₁ - 0.2·P₂ + 0.5·P₃)
+       = sigmoid(high on left + slight suppression right + center boost)
+       = a mask that covers the left-center region → fits object A
+```
+
+---
+
+### Full YOLACT Architecture
+
+```
+Input image [550×550]
+      ↓
+ResNet-101 + FPN → {P3, P4, P5, P6, P7}   (shared backbone)
+      ↓                        ↓
+  Protonet                 Detection Head
+  (runs on P3)             (runs on all FPN levels)
+      ↓                        ↓
+  [138×138×32]             Per anchor:
+  prototype maps           - class scores (80 classes)
+                           - box offsets (4)
+                           - mask coeffs (32)  ← tanh activated
+      ↓                        ↓
+                        NMS → top N detections
+                               ↓
+                    ┌─────────────────────┐
+                    │   Mask Assembly     │
+                    │ M = sigmoid(P · Cᵀ) │
+                    │  [138×138×N]        │
+                    └─────────────────────┘
+                               ↓
+                    Crop to bounding box + resize
+                               ↓
+                    Final instance masks [H×W×N]
+```
+
+---
+
+### Why YOLACT Is Fast: Cost Analysis
+
+```
+Operation            Mask R-CNN              YOLACT
+─────────────────    ──────────────────      ───────────────────
+Backbone + FPN       once                    once
+Region proposals     RPN (separate pass)     none — anchor-based
+Feature extraction   RoIAlign × 300 crops    none
+Mask prediction      Mask head × 300 times   Protonet × 1 time
+Mask assembly        none (direct output)    matrix multiply × 1
+
+Total mask cost:     O(N) per-proposal ops   O(1) protonet + O(N·K) matmul
+```
+
+**Real-world speed:**
+```
+Model                   FPS (Titan Xp)    COCO mask AP
+──────────────────────  ──────────────    ────────────
+Mask R-CNN (ResNet-101) ~5 FPS            35.7%
+YOLACT (ResNet-101)     ~30 FPS           31.2%
+YOLACT-550 (ResNet-50)  ~42 FPS           28.2%
+YOLACT++ (ResNet-50)    ~33 FPS           34.1%
+```
+
+~6× faster than Mask R-CNN with only ~4% AP drop.
+
+---
+
+### Why Accuracy Is Slightly Lower: The Limitations of Linear Combinations
+
+**Problem 1: Prototype entanglement for nearby objects**
+
+```
+Two people standing side by side:
+
+Person A:   ████░░░░
+Person B:   ░░░░████
+
+A single prototype might activate for both:
+P₁:  ████████   (broad activation across both)
+
+Coefficients:
+  Person A: c₁ = +1.0
+  Person B: c₁ = +1.0
+
+Linear combination can't separate them without additional
+prototypes that specifically distinguish left vs right
+```
+
+Mask R-CNN's per-object crop sidesteps this by predicting the mask in a **local coordinate frame** centered on each object.
+
+**Problem 2: Mask leakage across instances**
+
+The cropping-to-bounding-box step prevents mask leakage, but if bounding boxes overlap significantly, the crop doesn't fully isolate the instance.
+
+**Problem 3: Low prototype resolution**
+
+At 1/4 input resolution (138×138 for 550×550 input), fine details smaller than ~4 pixels are lost.
+
+---
+
+### YOLACT++ Improvements
+
+1. **Mask re-scoring**: predict mask quality (IoU between predicted mask and GT), multiply final confidence — better ranking
+2. **Deformable convolutions** in backbone: better spatial alignment for irregular shapes
+3. **Optimized NMS**: faster post-processing
+
+Result: YOLACT++ at 33 FPS achieves 34.1% mAP — competitive with Mask R-CNN's 35.7% at 5 FPS.
+
+---
+
+### YOLACT vs Mask R-CNN: Design Philosophy
+
+| Dimension | Mask R-CNN | YOLACT |
+|---|---|---|
+| Mask prediction | Per-object local crop | Global prototypes + per-object coefficients |
+| Speed | Slow (O(N) mask heads) | Fast (O(1) protonet + cheap assembly) |
+| Accuracy | Higher (local coordinate frame) | Slightly lower (global basis) |
+| Nearby instance separation | Strong | Weaker |
+| Architecture style | Two-stage | One-stage |
+| Real-time capable | No | Yes |
+| Key innovation | RoIAlign + per-class binary masks | Prototype factorization |
+
+---
+
+**Interview one-liner:**
+> YOLACT factors instance mask prediction into two cheap global operations: a Protonet generates K=32 shared spatial prototype masks once per image, and the detection head predicts K coefficients per object. Masks are assembled via a single matrix multiply — `sigmoid(P · Cᵀ)` — making mask generation O(1) regardless of object count. Accuracy is slightly lower than Mask R-CNN because the linear combination basis struggles to separate nearby same-class instances without a per-object local coordinate frame.
+
+---
+
 *End of notes — continued in next session.*
