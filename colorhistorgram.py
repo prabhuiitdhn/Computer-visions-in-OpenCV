@@ -40,10 +40,10 @@ p=ax.imshow(hist, interpolation="nearest")
 ax.set_title("2D color for Blue and red")
 plt.colorbar(p)
 
-print "2D histogram shape:%s, with %d values" %(hist.shape, hist.flatten().shape[0])
+print ("2D histogram shape:%s, with %d values" %(hist.shape, hist.flatten().shape[0]))
 
 #3D histogram
 hist=cv2.calcHist([image],[0, 1, 2], None, [8,8,8],[0, 256, 0, 256, 0, 256])
-print "3D Histogram shap:%s, with %d values" %(hist.shape, hist.flatten().shape[0])
+print ("3D Histogram shape:%s, with %d values" %(hist.shape, hist.flatten().shape[0]))
 plt.show()
 
