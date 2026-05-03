@@ -2340,4 +2340,179 @@ Result: YOLACT++ at 33 FPS achieves 34.1% mAP — competitive with Mask R-CNN's 
 
 ---
 
+## Boundary Challenges: Receptive Field Limitation
+
+---
+
+### What Is a Receptive Field?
+
+The **receptive field** of a neuron in a CNN is the region of the input image that influences that neuron's output. At each layer, a neuron "sees" only a local patch. As you go deeper, the receptive field grows — but it grows **slowly**.
+
+```
+Layer 1 (Conv 3×3):   each neuron sees 3×3 pixels
+Layer 2 (Conv 3×3):   each neuron sees 5×5 pixels
+Layer 3 (Conv 3×3):   each neuron sees 7×7 pixels
+Layer n (Conv 3×3):   each neuron sees (2n+1)×(2n+1) pixels
+
+Formula for stacked 3×3 convs (no pooling):
+  RF = 1 + n × (kernel_size - 1) = 1 + n × 2
+```
+
+Adding pooling with stride 2 helps — neurons beyond that layer see 2× more of the input — BUT spatial resolution of the feature map is halved.
+
+The problem: for a standard VGG-16 backbone processing a 512×512 image, the theoretical receptive field at the final conv layer is ~190×190, but the **effective receptive field** (where activations actually depend meaningfully on input) is empirically much smaller — around **40–60 pixels**.
+
+---
+
+### Why This Matters for Boundary Prediction
+
+Consider segmenting a large object — say a car that spans 300×150 pixels:
+
+```
+Image [512×512]:
+
+┌────────────────────────────────┐
+│                                │
+│    ┌──────────────────────┐    │
+│    │                      │    │
+│    │   CAR (300×150 px)   │    │
+│    │                      │    │
+│    └──────────────────────┘    │
+│                                │
+└────────────────────────────────┘
+
+Boundary pixel at left edge of car:
+  A neuron predicting this pixel's label has RF ~50px
+  It sees: [25px of road] + [25px of car interior]
+```
+
+A 50px receptive field can see that:
+- "There's road texture on the left"
+- "There's car texture on the right"
+
+But it **cannot** see:
+- The full car shape (300px wide — far outside the 50px RF)
+- The right boundary of the same car
+- Whether this object continues above and below
+- The semantic category of the whole object ("this is definitely a car, not a bus")
+
+---
+
+### The Two Scales Problem at Boundaries
+
+Correct boundary prediction requires simultaneously knowing two things:
+
+```
+1. LOCAL information (fine scale):
+   "Exactly where does the edge pixel fall?"
+   → Needs small receptive field, high resolution
+   → Early layers preserve this
+
+2. GLOBAL context (coarse scale):
+   "What is this object? Does the boundary make semantic sense?"
+   → Needs large receptive field, sees full object
+   → Late layers provide this, but at low resolution
+```
+
+A small receptive field at the boundary pixel level captures **local edge texture** well — there's a clear intensity gradient, a color change, a texture discontinuity. But it doesn't know *what* the object is, so it can't decide whether to draw the boundary here or 2 pixels to the left.
+
+---
+
+### How the RF Limitation Creates Boundary Errors
+
+**Error Type 1: Blurry/smeared boundaries**
+
+The network predicts soft probability maps. Near a boundary, probabilities blend between classes because no single neuron has enough context to be decisive:
+
+```
+Ground truth:          Network output (probability of "car"):
+
+  0  0  0  1  1  1      0.1  0.2  0.4  0.6  0.8  0.9
+  0  0  0  1  1  1  →   0.1  0.2  0.4  0.6  0.8  0.9
+  0  0  0  1  1  1      0.1  0.2  0.4  0.6  0.8  0.9
+
+After threshold at 0.5:
+  0  0  0  0  1  1  ← boundary shifted 1 pixel right!
+```
+
+**Error Type 2: Incorrect class assignment near large object boundaries**
+
+```
+Large object [500×500 px], RF = 50px:
+
+  Neuron at center:    sees 50×50 px of pure object interior
+                       → "definitely object" → high confidence ✓
+
+  Neuron at boundary:  sees 25px object + 25px background
+                       → mixed signal → lower confidence ✗
+
+  Neuron at corner:    sees ~25px object + ~25px background (2 directions)
+                       → weakest signal → most error-prone ✗✗
+```
+
+**Error Type 3: Missed thin structures**
+
+```
+Thin pole [3px wide], late-stage feature map has stride 16:
+  3px / 16 = 0.19 px in feature space → essentially invisible
+
+Even if skip connections provide early-layer detail,
+the coarse feature map doesn't know "this is a pole" vs "noise"
+→ pole predicted as background
+```
+
+---
+
+### The Core Tension: Resolution vs Context
+
+```
+POOLING MORE (large effective RF):
+  ↑ Global context — knows what the object is
+  ↓ Spatial resolution — loses exact boundary location
+
+POOLING LESS (small effective RF):
+  ↓ Global context — can't classify large objects reliably
+  ↑ Spatial resolution — preserves exact boundary pixels
+```
+
+Neither extreme works for boundaries. You need **both simultaneously** at the same spatial location — which is exactly what U-Net (skip connections), DeepLab (ASPP — multiple dilation rates = multiple RFs at once), and Transformers (global attention = infinite RF) are designed to provide.
+
+---
+
+### Theoretical vs Effective Receptive Field
+
+The **theoretical receptive field** is often much larger than the **effective receptive field** (ERF).
+
+The ERF measures which input pixels *actually* have meaningful gradient flow to a given neuron. Due to the multiplicative nature of gradients and weight magnitudes, the distribution of influence is approximately **Gaussian** — concentrated near the center, falling off rapidly at edges.
+
+```
+Theoretical RF of a deep conv net: 200×200px
+Effective RF (empirical, Luo et al. 2016): ~40×40px
+
+The outer ring of the theoretical RF contributes < 1%
+of the total activation variance — effectively invisible.
+```
+
+This means even architectures with large theoretical RFs still behave as if they have much smaller effective context — making boundary errors persist.
+
+---
+
+### Solutions Overview
+
+| Problem | Solution | Mechanism |
+|---|---|---|
+| Small effective RF | Dilated/atrous convolutions | Expand RF without losing resolution |
+| RF too small for large objects | ASPP (multiple dilation rates) | Multiple RFs simultaneously at same layer |
+| Fine detail lost by pooling | Skip connections (U-Net, FPN) | Inject early fine-scale features into decoder |
+| No global context | Transformers / self-attention | Every pixel attends to every other — RF = whole image |
+| Blurry boundary probability | CRF post-processing | Sharpen decision boundary using pairwise pixel energy |
+| Boundary pixels underrepresented | Boundary-aware loss weighting | Higher loss at boundary pixels — forces focus |
+
+---
+
+**Interview one-liner:**
+> The receptive field limitation means that a neuron predicting a boundary pixel only "sees" a small local patch — enough to detect an edge exists but not enough to understand the full object's shape, class, or extent. This causes blurry, shifted, or missed boundaries. The fix is to simultaneously provide local high-resolution features (via skip connections) and global context (via dilated convolutions, ASPP, or attention) at the same spatial location.
+
+---
+
 *End of notes — continued in next session.*
