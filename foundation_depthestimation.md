@@ -591,4 +591,278 @@ This makes the loss **invariant to scale and shift** — the network only has to
 
 ---
 
+## Monocular Depth: Single Image → Depth Map — The Underdetermined Problem
+
+---
+
+### What "Underdetermined" Means
+
+A system of equations is **underdetermined** when there are more unknowns than constraints — infinitely many solutions satisfy all the equations simultaneously.
+
+For monocular depth:
+
+```
+Unknowns:    depth Z(u,v) for every pixel → H × W unknowns
+             (e.g., 480 × 640 = 307,200 unknowns)
+
+Constraints: pixel color I(u,v) for every pixel → H × W equations
+
+On the surface: same number of equations and unknowns!
+But the equations DON'T constrain depth:
+
+  I(u,v) = surface_color(X, Y, Z) × lighting(X, Y, Z)
+
+  This depends on: material color, surface normal, light position,
+  AND depth Z — all unknown simultaneously.
+
+  One equation, multiple unknowns → severely underdetermined.
+```
+
+Even worse: changing depth while scaling the scene leaves the image **completely unchanged**. It's not just underdetermined — it's **fundamentally degenerate**.
+
+---
+
+### Formal Proof: Infinitely Many 3D Scenes → Same Image
+
+Let scene $\mathcal{S}$ consist of surfaces with positions and colors. Camera with focal length $f$ produces image $\mathcal{I}$.
+
+Now construct scene $\mathcal{S}_k$ by scaling: every 3D point $(X,Y,Z)$ → $(kX, kY, kZ)$, surface normals keep the same direction, light sources scaled similarly.
+
+Projection of $\mathcal{S}_k$:
+
+$$u = f \frac{kX}{kZ} = f \frac{X}{Z} \quad \text{(unchanged)}$$
+
+The $k$ cancels. The image is identical. This holds for **any** $k > 0$.
+
+```
+Scene at scale k=1:     Scene at scale k=2:     Scene at scale k=10:
+  house 10m away          house 20m away          house 100m away
+  (real size)             (2× bigger house)       (10× bigger house)
+
+All three produce:         IDENTICAL image
+```
+
+This isn't a numerical coincidence — it's a structural property of perspective projection. No amount of image analysis can distinguish them without external information.
+
+---
+
+### The Degrees of Freedom Problem
+
+```
+3D scene:
+  Each surface point has position (X, Y, Z) + material properties
+  → infinite-dimensional space of possible scenes
+
+Single image:
+  H × W pixels, each with 3 color values
+  → H × W × 3 real numbers of information
+
+Mapping: scene → image is infinitely many-to-one
+  The "fiber" above each image (all scenes that produce it)
+  is infinitely large
+```
+
+In information theory terms: the image has $H \times W \times 3 \times 8$ bits. The 3D scene has infinitely more degrees of freedom. No injective inverse exists.
+
+---
+
+### What "Requires Learning Priors" Actually Means
+
+Since geometry alone can't solve the problem, depth estimation relies on **statistical regularities** — patterns that are true of real-world scenes **on average** even if not always.
+
+A **prior** is a probability distribution over depth given image features:
+
+$$P(Z \mid \mathcal{I}) = \frac{P(\mathcal{I} \mid Z) \cdot P(Z)}{P(\mathcal{I})}$$
+
+In Bayesian terms:
+- $P(Z)$ = **prior**: what depths are likely in the world before seeing the image
+- $P(\mathcal{I} \mid Z)$ = **likelihood**: how likely is this image given this depth
+- $P(Z \mid \mathcal{I})$ = **posterior**: best depth estimate given the image
+
+A deep neural network implicitly learns to approximate this posterior from millions of (image, depth) pairs.
+
+---
+
+### The Priors Being Learned: Concrete Examples
+
+#### Prior 1: Vertical Position → Depth
+
+```
+In road/outdoor scenes:
+  Objects near bottom of image → close (on the ground, near camera)
+  Objects near horizon → far
+  Sky (top of image) → infinitely far
+
+Network learns: "pixel at row 420/480 is probably road at ~3m"
+                "pixel at row 200/480 is probably sky or distant object"
+
+Fails in:
+  - Indoor scenes (ceiling is far, floor is close)
+  - Aerial photography (everything is "below" camera)
+  - Scenes with ramps or hills (ground is not flat)
+```
+
+#### Prior 2: Texture Gradient → Depth
+
+```
+Uniform texture (grass, cobblestones, sand):
+  Texture elements appear SMALLER and MORE DENSELY PACKED
+  as distance increases
+
+  ● ●●●●●●●●●●●●●●●●  ← near: sparse, large texture elements
+  ●●●●●●●●●●●●●●●●●● ← medium
+  ················    ← far: dense, tiny, eventually blur together
+
+Failure case: textureless surface (white wall)
+              → no gradient signal → depth uncertain
+```
+
+#### Prior 3: Occlusion Ordering
+
+```
+Object A occludes object B at their shared boundary:
+  → A is closer than B (definitive ordering, no scale needed)
+
+  ┌─────────┐
+  │    A    │──── boundary pixel: A is in front of B
+  └─────────┘
+     │   ┌──────────────────┐
+     │   │        B         │
+     │   └──────────────────┘
+```
+
+#### Prior 4: Familiar Object Size (Absolute Scale Prior)
+
+```
+Trained on millions of images with:
+  - Cars → typically 1.5m tall, 4.5m long
+  - People → typically 1.7m tall
+  - Doors → typically 2.0m tall
+
+Network sees a person occupying 100px height in 720px image:
+  "Person is ~1.7m. Appears 100/720 = 13.9% of frame height.
+   At f=700px: Z ≈ 700 × 1.7 / 100 = ~12m"
+
+Strongest prior for metric depth — but requires correct object recognition.
+```
+
+#### Prior 5: Atmospheric Perspective
+
+```
+Near objects:  high contrast, saturated colors, sharp edges
+Far objects:   low contrast, desaturated/bluish, hazy edges
+
+Network learns: "hazy, low-contrast region → far away"
+
+Failure case: foggy day → everything looks "far" even if close
+```
+
+---
+
+### Why Deep Networks Are Needed (Not Just Rules)
+
+Priors **conflict and interact**:
+
+```
+Scenario: a person standing in front of a white wall
+
+Prior 1 (vertical position):  "person is at row 300 → ~5m"
+Prior 3 (occlusion):          "person occludes wall → person is closer"
+Prior 4 (familiar size):      "person is 80px tall → ~15m"
+
+These give different estimates. How do you combine them?
+```
+
+A deep network learns:
+1. Which priors to trust in which contexts
+2. How to weight conflicting priors
+3. When to fall back to relative depth (give up on metric)
+4. Non-obvious correlations humans haven't explicitly identified
+
+This requires millions of training examples to cover the enormous diversity of real scenes.
+
+---
+
+### The Underdetermination Manifests as Training Instability
+
+Training a naive monocular depth network with an L1 or L2 loss often fails because:
+
+```
+For the same input patch:
+  Training example 1: road at 5m  (depth=5)
+  Training example 2: road at 15m (same visual appearance, depth=15)
+
+The network sees the same image → must predict different depths
+→ loss gradient pulls in opposite directions
+→ network averages to ~10m for both → wrong for both
+
+This is the "regression to the mean" problem:
+  the network predicts blurry, averaged depth maps
+  because per-pixel depth is poorly constrained by appearance alone
+```
+
+Solutions that combat underdetermination during training:
+
+```
+1. SCALE-INVARIANT LOSS (Eigen et al.):
+   Compute loss on log-depth differences, not absolute depths
+   → invariant to global scale factor
+
+2. ORDINAL/RANKING LOSS:
+   "Is pixel A closer than pixel B?" (binary)
+   → more constrained than exact depth, uses more training pairs
+
+3. RELATIVE DEPTH NORMALIZATION (MiDaS):
+   Normalize depth to [0,1] per image during training
+   → removes scale and shift, focuses on shape
+
+4. MULTI-TASK LEARNING:
+   Jointly predict depth + surface normals + semantic labels
+   → normals constrain depth gradients, semantics constrain scale
+```
+
+---
+
+### The Prior Generalization Problem
+
+Because monocular depth is fundamentally about learned priors, it suffers from **distribution shift**:
+
+```
+KITTI (outdoor driving):          NYUv2 (indoor):
+  Camera at 1.5m height             Camera handheld at ~1.2m
+  Depth range: 1–80m                Depth range: 0.5–10m
+  Dominant colors: grey/green       Dominant colors: varied
+
+Model trained on KITTI, tested on NYUv2:
+  → "floor" predicted as ~30m (was trained: horizontal surface = road = 30m)
+  → "ceiling" predicted as sky depth
+  → total failure
+
+The priors learned for one domain ACTIVELY HARM performance in another.
+```
+
+This is the core reason why **relative depth models** (MiDaS, DPT, Depth Anything) exist — by learning scale-invariant relative depth across many datasets simultaneously, they build domain-agnostic priors.
+
+---
+
+### Summary: Why It's Hard
+
+```
+Problem source:         Consequence:
+──────────────          ────────────
+Many-to-one projection  No unique geometric solution exists
+Scale-depth coupling    Absolute metric depth requires external reference
+Prior conflict          Depth estimates inconsistent across scene regions
+Distribution shift      Learned priors don't transfer across domains
+Textureless regions     Core visual cues (texture gradient) unavailable
+Thin structures         Small objects have few pixels → high uncertainty
+```
+
+---
+
+**Interview one-liner:**
+> Monocular depth is underdetermined because perspective projection is a many-to-one mapping — infinitely many 3D scenes differing only by a global scale factor produce identical images. A depth network can't solve this geometrically, so it instead learns statistical priors from training data: vertical position correlates with depth, texture gradients indicate distance, familiar object sizes anchor metric scale. These priors work well within the training distribution but generalize poorly, which is why metric monocular depth remains an open challenge while relative depth (predicting depth ordering, not absolute values) is largely solved.
+
+---
+
 *End of notes — continued in next session.*
