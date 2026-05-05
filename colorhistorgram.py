@@ -47,3 +47,4 @@ hist=cv2.calcHist([image],[0, 1, 2], None, [8,8,8],[0, 256, 0, 256, 0, 256])
 print ("3D Histogram shape:%s, with %d values" %(hist.shape, hist.flatten().shape[0]))
 plt.show()
 
+cv2.waitKey(0)
