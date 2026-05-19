@@ -80,9 +80,9 @@ To address the challenges of Gradient Descent, advanced optimizers have been dev
 3. **RMSProp (Root Mean Square Propagation)**
    - Modifies Adagrad by using an exponentially decaying average of squared gradients:
 
-     $$E[g^2]_t = \beta E[g^2]_{t-1} + (1-\beta)g_t^2$$
+     $$E[g^2]_{t} = \beta E[g^2]_{t-1} + (1-\beta)g_{t}^2$$
 
-     $$\theta_{t+1} = \theta_t - \frac{\eta}{\sqrt{E[g^2]_t + \epsilon}} \nabla_\theta L(\theta_t)$$
+     $$\theta_{t+1} = \theta_{t} - \frac{\eta}{\sqrt{E[g^2]_{t} + \epsilon}} \nabla_{\theta} L(\theta_{t})$$
 
    - **Advantages**: Solves Adagrad's diminishing learning rate problem.
 
@@ -224,3 +224,217 @@ Steepest Descent is often used interchangeably with Gradient Descent, but there 
 
 ### **Conclusion**
 Steepest Descent is a fundamental optimization method that provides the foundation for many modern algorithms. While it has limitations in terms of convergence speed and sensitivity to step size, its simplicity and effectiveness make it a cornerstone of optimization theory and practice.
+
+---
+
+## Batch Gradient Descent
+
+### **Core Concept**
+Unlike Stochastic Gradient Descent (SGD), which updates weights after each individual sample, Batch Gradient Descent processes all training samples together and computes a single aggregate gradient before updating the model parameters. This approach leverages the full information from the dataset to compute a more stable gradient estimate.
+
+#### **Mathematical Formulation**
+Given a training dataset $\mathcal{D} = \{(x_1, y_1), (x_2, y_2), \ldots, (x_N, y_N)\}$ with $N$ samples, the loss function is:
+
+$$L(\theta) = \frac{1}{N} \sum_{i=1}^{N} \ell(f_\theta(x_i), y_i)$$
+
+Where:
+- $\theta$: Model parameters (weights and biases).
+- $f_\theta(x_i)$: Model prediction for sample $i$.
+- $\ell(\cdot, \cdot)$: Loss function (e.g., cross-entropy, MSE).
+
+The gradient with respect to all parameters is:
+
+$$\nabla_\theta L(\theta) = \frac{1}{N} \sum_{i=1}^{N} \nabla_\theta \ell(f_\theta(x_i), y_i)$$
+
+The parameter update rule is:
+
+$$\theta_{t+1} = \theta_t - \eta \nabla_\theta L(\theta_t)$$
+
+Where:
+- $\theta_t$: Parameters at iteration $t$.
+- $\eta$: Learning rate.
+- $\nabla_\theta L(\theta_t)$: Gradient computed over the entire training set.
+
+---
+
+### **Batch Gradient Descent vs Other Variants**
+
+| Aspect | Batch GD | Stochastic GD | Mini-Batch GD |
+|--------|----------|---------------|---------------|
+| **Data per update** | Entire dataset ($N$) | One sample ($1$) | Subset ($m$) |
+| **Gradient variance** | Low | High | Medium |
+| **Update frequency** | Once per epoch | Once per sample | Once per batch |
+| **Computational cost** | High per update | Low per update | Medium per update |
+| **Memory requirement** | High | Low | Medium |
+| **Convergence path** | Smooth, stable | Noisy, erratic | Balanced |
+
+---
+
+### **Advantages of Batch Gradient Descent**
+
+1. **Stable Gradient Estimates**:
+   - Computing the gradient over all samples provides an accurate estimate of the true gradient of the loss function.
+   - Low variance in gradient estimates → smooth descent path.
+
+2. **Guaranteed Convergence** (for Convex Functions):
+   - With appropriate learning rate, Batch GD is guaranteed to converge to a local minimum (or global minimum for convex functions).
+   - The descent is monotonic — loss decreases at every iteration (under reasonable conditions).
+
+3. **Efficient Vectorization**:
+   - Modern hardware (GPUs, TPUs) is optimized for vectorized operations.
+   - Computing gradients for all $N$ samples simultaneously leverages parallel processing efficiently.
+
+4. **Well-Understood Dynamics**:
+   - The behavior is predictable and mathematically well-studied.
+   - Easier to diagnose optimization issues.
+
+---
+
+### **Disadvantages of Batch Gradient Descent**
+
+1. **Computational Expense**:
+   - Requires loading the entire dataset into memory for each gradient computation.
+   - A single update may require millions of forward/backward passes (for large $N$).
+   - Infeasible for datasets that don't fit in memory.
+
+2. **Slow Training for Large Datasets**:
+   - Only one parameter update per epoch, regardless of dataset size.
+   - For a dataset with 1 million samples, Batch GD performs only one update while SGD performs 1 million.
+
+3. **May Get Stuck in Local Minima**:
+   - For non-convex loss functions (common in deep learning), smooth descent paths can lead to poor local minima.
+   - Lacks the "noise" that helps SGD escape sharp local minima.
+
+4. **No Online Learning**:
+   - Cannot adapt to new data arriving in real-time without recomputing the entire gradient.
+
+---
+
+### **Convergence Rate**
+
+For a strongly convex function, Batch Gradient Descent achieves:
+
+$$\mathbb{E}[L(\theta_t)] - L(\theta^*) \leq O\left(\exp\left(-\frac{2\eta\mu t}{2-\eta L}\right)\right)$$
+
+Where:
+- $\mu$: Strong convexity constant.
+- $L$: Smoothness constant (Lipschitz constant of the gradient).
+- $t$: Number of iterations.
+
+**Key insight**: The convergence rate is **geometric** (exponential), which is optimal among first-order methods. However, this requires:
+- A convex loss function.
+- Proper learning rate selection.
+- Sufficient computational resources to actually perform all iterations.
+
+---
+
+### **Learning Rate and Step Size**
+
+The learning rate $\eta$ is critical:
+
+1. **Too Small** ($\eta \to 0$):
+   - Training becomes very slow, requiring thousands of epochs.
+   - May take infeasible time to reach convergence.
+
+2. **Too Large** ($\eta$ too big):
+   - Updates may overshoot the minimum, causing loss to increase.
+   - Can diverge entirely: $\|\theta_t\| \to \infty$.
+
+3. **Optimal Range**:
+   - For a well-conditioned problem, $\eta \in (0, 2/L)$ guarantees convergence, where $L$ is the smoothness constant.
+   - For deep neural networks, empirical tuning is required.
+
+---
+
+### **Practical Algorithm: Batch Gradient Descent**
+
+```
+Algorithm: Batch Gradient Descent
+
+Input: Training data D, initial parameters θ₀, learning rate η, max iterations T
+Output: Trained parameters θ*
+
+for t = 1 to T:
+    ∇L ← 0  // Initialize gradient accumulator
+    for each sample (xᵢ, yᵢ) in D:
+        ∇L ← ∇L + ∇_θ ℓ(f_θ(xᵢ), yᵢ)  // Accumulate gradients
+    ∇L ← ∇L / N  // Average gradient
+    θ ← θ - η · ∇L  // Single parameter update
+    if converged:
+        break
+return θ
+```
+
+---
+
+### **Comparison with Mini-Batch Gradient Descent**
+
+Mini-Batch GD is the practical gold standard because it balances Batch GD's stability with SGD's efficiency:
+
+$$\theta_{t+1} = \theta_t - \eta \frac{1}{m} \sum_{i \in \text{batch}} \nabla_\theta \ell(f_\theta(x_i), y_i)$$
+
+Where $m$ (batch size) is typically $32$, $64$, $128$, or $256$ — much smaller than $N$ but larger than $1$.
+
+**Why Mini-Batch wins**:
+- Low variance gradient estimates (like Batch GD).
+- Frequent updates (like SGD).
+- Computational efficiency on GPUs.
+- Fast convergence in practice.
+
+---
+
+### **When to Use Batch Gradient Descent**
+
+1. **Small Datasets**:
+   - If the entire dataset fits comfortably in memory, Batch GD is viable.
+   - Example: datasets with $< 10,000$ samples.
+
+2. **Highly Convex Problems**:
+   - Convex optimization problems where monotonic convergence guarantees are valuable.
+   - Example: logistic regression, SVM training.
+
+3. **Theoretical Analysis**:
+   - When proving convergence properties or analyzing optimization dynamics.
+   - Batch GD's smooth behavior is easier to analyze mathematically.
+
+4. **When Determinism is Required**:
+   - Some applications require reproducible training runs.
+   - Batch GD with a fixed learning rate is deterministic (ignoring floating-point rounding).
+
+---
+
+### **Practical Considerations**
+
+1. **Memory Management**:
+   - Pre-allocate memory for the full dataset or use disk I/O to stream batches.
+   - Modern frameworks handle this, but it can be a bottleneck.
+
+2. **Learning Rate Scheduling**:
+   - Even with Batch GD, adaptive schedules help:
+     - Polynomial decay: $\eta_t = \eta_0 (1 - t/T)^p$
+     - Exponential decay: $\eta_t = \eta_0 \exp(-\lambda t)$
+
+3. **Convergence Monitoring**:
+   - Track loss on a held-out validation set.
+   - Stop training if validation loss plateaus.
+
+4. **Gradient Normalization**:
+   - Normalize gradients to prevent overflow or underflow:
+     $$\nabla_\theta L \leftarrow \frac{\nabla_\theta L}{\|\nabla_\theta L\| + \epsilon}$$
+
+---
+
+### **Historical Perspective**
+
+Batch Gradient Descent was the primary optimization method in early machine learning (1980s–1990s) because:
+- Datasets were small enough to fit in memory.
+- Theoretical guarantees were highly valued.
+- Computational resources were limited, so efficiency mattered less than stability.
+
+As datasets grew and deep learning emerged, Mini-Batch GD and SGD became dominant because they enable training on datasets that don't fit in memory and converge faster in practice.
+
+---
+
+### **Conclusion**
+
+Batch Gradient Descent is a foundational optimization algorithm that computes gradients over the entire dataset before updating parameters. While it provides stable, accurate gradient estimates and guaranteed convergence for convex problems, its computational expense for large datasets makes it impractical for modern machine learning. Nevertheless, understanding Batch GD is essential for comprehending optimization theory and appreciating why Mini-Batch variants are the industry standard. For senior researchers, Batch GD serves as a reference point for analyzing convergence rates, learning rate effects, and the theoretical limits of first-order optimization methods.
