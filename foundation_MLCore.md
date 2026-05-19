@@ -63,16 +63,16 @@ To address the challenges of Gradient Descent, advanced optimizers have been dev
 1. **Momentum**
    - Adds a fraction of the previous update to the current update:
 
-     $$v_t = \gamma v_{t-1} + \eta \nabla_\theta L(\theta_t)$$
+     $$v_{t} = \gamma v_{t-1} + \eta \nabla_{\theta} L(\theta_{t})$$
 
-     $$\theta_{t+1} = \theta_t - v_t$$
+     $$\theta_{t+1} = \theta_{t} - v_{t}$$
 
    - **Advantages**: Accelerates convergence, reduces oscillations.
 
 2. **Adagrad (Adaptive Gradient Algorithm)**
    - Adapts the learning rate for each parameter based on the historical gradients:
 
-     $$\theta_{t+1} = \theta_t - \frac{\eta}{\sqrt{G_{t,ii} + \epsilon}} \nabla_\theta L(\theta_t)$$
+     $$\theta_{t+1} = \theta_{t} - \frac{\eta}{\sqrt{G_{t,ii} + \epsilon}} \nabla_{\theta} L(\theta_{t})$$
 
    - **Advantages**: Handles sparse data well.
    - **Disadvantages**: Learning rate diminishes over time.
@@ -80,22 +80,22 @@ To address the challenges of Gradient Descent, advanced optimizers have been dev
 3. **RMSProp (Root Mean Square Propagation)**
    - Modifies Adagrad by using an exponentially decaying average of squared gradients:
 
-     $$E[g^2]_{t} = \beta E[g^2]_{t-1} + (1-\beta)g_{t}^2$$
+     $$E[g^{2}]_{t} = \beta E[g^{2}]_{t-1} + (1-\beta)g_{t}^{2}$$
 
-     $$\theta_{t+1} = \theta_{t} - \frac{\eta}{\sqrt{E[g^2]_{t} + \epsilon}} \nabla_{\theta} L(\theta_{t})$$
+     $$\theta_{t+1} = \theta_{t} - \frac{\eta}{\sqrt{E[g^{2}]_{t} + \epsilon}} \nabla_{\theta} L(\theta_{t})$$
 
    - **Advantages**: Solves Adagrad's diminishing learning rate problem.
 
 4. **Adam (Adaptive Moment Estimation)**
    - Combines Momentum and RMSProp:
 
-     $$m_t = \beta_1 m_{t-1} + (1-\beta_1)g_t$$
+     $$m_{t} = \beta_{1} m_{t-1} + (1-\beta_{1})g_{t}$$
 
-     $$v_t = \beta_2 v_{t-1} + (1-\beta_2)g_t^2$$
+     $$v_{t} = \beta_{2} v_{t-1} + (1-\beta_{2})g_{t}^{2}$$
 
-     $$\hat{m}_t = \frac{m_t}{1-\beta_1^t}, \quad \hat{v}_t = \frac{v_t}{1-\beta_2^t}$$
+     $$\hat{m}_{t} = \frac{m_{t}}{1-\beta_{1}^{t}}, \quad \hat{v}_{t} = \frac{v_{t}}{1-\beta_{2}^{t}}$$
 
-     $$\theta_{t+1} = \theta_t - \frac{\eta}{\sqrt{\hat{v}_t} + \epsilon} \hat{m}_t$$
+     $$\theta_{t+1} = \theta_{t} - \frac{\eta}{\sqrt{\hat{v}_{t}} + \epsilon} \hat{m}_{t}$$
 
    - **Advantages**: Works well in practice, robust to noisy gradients.
 
