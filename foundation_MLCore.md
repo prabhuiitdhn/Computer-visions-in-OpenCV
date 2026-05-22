@@ -554,10 +554,9 @@ This means in at least one direction, the function curves downward — creating 
 ```
       Loss
         |
-        |     ___
-        |    /   \
-        |   /     \
-        |__/       \___
+      |    \        /
+      |     \      /
+      |      \____/
         |_________________ θ
     Single global minimum, smooth descent path
 ```
@@ -565,9 +564,10 @@ This means in at least one direction, the function curves downward — creating 
 #### **Non-Convex Landscape**
 ```
       Loss
-        |  /\    /\
-        | /  \  /  \___
-        |/    \/
+            |
+            |    /\      /\
+            |   /  \____/  \
+            |__/            \__
         |_________________ θ
     Multiple local minima, saddle points, plateaus
 ```
