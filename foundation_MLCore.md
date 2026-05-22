@@ -445,6 +445,14 @@ Batch Gradient Descent is a foundational optimization algorithm that computes gr
 
 The convexity of the loss function is one of the most important properties determining the behavior of machine learning optimizers. It fundamentally affects convergence guarantees, the risk of getting stuck in local minima, and the overall trainability of models.
 
+Short answer: **RMSE is not always convex in model parameters**.
+
+- If predictions are **linear in parameters** (like linear regression), RMSE is convex because it is a scaled $L_2$ norm:
+   $$\text{RMSE}(\theta)=\frac{1}{\sqrt{n}}\|X\theta-y\|_2$$
+- For **nonlinear models** (e.g., neural networks), RMSE is generally **non-convex**.
+
+So, convexity depends on the model form, not just the RMSE formula itself.
+
 ---
 
 ### **Convex Functions: Definition and Properties**
