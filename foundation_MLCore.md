@@ -114,6 +114,22 @@ To address the challenges of Gradient Descent, advanced optimizers have been dev
 4. **Regularization**
    - Techniques like L1/L2 regularization, dropout, and batch normalization improve generalization and stability.
 
+Learning rate scheduling means reducing or varying the learning rate during training so the model learns fast at first and then fine-tunes more carefully later.
+
+1. **Step Decay**
+   - Learning rate is dropped by a fixed factor at specific epochs (for example, every 10 epochs multiply by 0.1).
+   - Formula: $\eta_t = \eta_0 \cdot \gamma^{\lfloor t/s \rfloor}$
+
+2. **Exponential Decay**
+   - Learning rate decreases smoothly every step/epoch by an exponential rule.
+   - Formula: $\eta_t = \eta_0 e^{-kt}$ (or $\eta_0 \cdot \gamma^t$)
+
+3. **Cyclic Learning Rate**
+   - Learning rate repeatedly goes up and down between a minimum and maximum value instead of only decreasing.
+   - This can help escape poor local minima and often speeds training.
+   - Typical pattern: triangular cycle between $\eta_{\min}$ and $\eta_{\max}$.
+
+
 ---
 
 ### **Conclusion**
