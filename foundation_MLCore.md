@@ -463,7 +463,7 @@ $$f(\lambda x + (1-\lambda) y) \leq \lambda f(x) + (1-\lambda) f(y)$$
    - Once you find a local minimum, you've found the best solution.
 
 2. **Unique Stationary Point**:
-   - If $\nabla f(x^*) = 0$, then $x^*$ is the global minimum (no saddle points).
+   - If $\nabla f(x^{\star}) = 0$, then $x^{\star}$ is the global minimum (no saddle points).
 
 3. **Gradient Descent Convergence Guarantee**:
    - Starting from any point, gradient descent with a proper learning rate will converge to the global minimum.
