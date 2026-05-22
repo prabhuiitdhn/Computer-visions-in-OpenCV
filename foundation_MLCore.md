@@ -515,7 +515,7 @@ $$f(\lambda x + (1-\lambda) y) > \lambda f(x) + (1-\lambda) f(y) \text{ for some
    - The optimization landscape can have many "good" and "bad" solutions.
 
 2. **Saddle Points**:
-   - Points where $\nabla f(x^*) = 0$ but $x^*$ is neither a minimum nor a maximum.
+   - Points where $\nabla f(x^{\star}) = 0$ but $x^{\star}$ is neither a minimum nor a maximum.
    - The Hessian has both positive and negative eigenvalues.
    - Gradient descent can get stuck at saddle points.
 
