@@ -27,8 +27,9 @@
 - The output at each pixel is the sum of element-wise products between the kernel and the image patch.
 
 **Mathematical formulation:**
+
 $$
-(I * K)(x, y) = \sum_{i=-n}^{n} \sum_{j=-n}^{n} K(i, j) \cdot I(x+i, y+j)
+(I \ast K)(x, y) = \sum_{i=-n}^{n} \sum_{j=-n}^{n} K(i, j) \cdot I(x+i, y+j)
 $$
 
 where $I$ is the image, $K$ is the kernel, and the result is a filtered image.
