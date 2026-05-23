@@ -299,22 +299,23 @@ If you train naively:
   But: 0% recall on the safety events you care about!
 ```
 
-Solutions:
-```
-1. Weighted loss: upweight minority classes
-   loss = Σ w_c · CrossEntropy(y_c, ŷ_c),  w_c ∝ 1/freq_c
+**Solutions:**
 
-2. Focal loss: down-weight easy negatives
-   FL(p_t) = -α_t(1-p_t)^γ log(p_t)
-   γ=2 makes well-classified examples contribute 100× less
+**1. Weighted loss** — upweight minority classes
 
-3. Hard negative mining: explicitly sample hard negatives during training
+$$\mathcal{L} = \sum_c w_c \cdot \text{CrossEntropy}(y_c, \hat{y}_c), \qquad w_c \propto \frac{1}{\text{freq}_c}$$
 
-4. Oversampling rare events (copy-paste augmentation for CV)
+**2. Focal loss** — down-weight easy negatives
 
-5. Two-stage: first detect "any event" (high recall),
-              then classify type (high precision)
-```
+$$FL(p_t) = -\alpha_t (1 - p_t)^{\gamma} \log(p_t)$$
+
+$\gamma = 2$ makes well-classified examples contribute 100× less to the loss than hard misclassified ones.
+
+**3. Hard negative mining** — explicitly sample hard negatives during training
+
+**4. Oversampling rare events** — copy-paste augmentation for CV (paste rare event crops into normal frames)
+
+**5. Two-stage pipeline** — first detect "any event" (high recall), then classify type (high precision)
 
 ---
 
