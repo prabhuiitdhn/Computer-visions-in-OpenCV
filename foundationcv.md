@@ -3698,6 +3698,7 @@ $$
 
 **Distortion correction:**
 Apply inverse distortion model to undistort image:
+
 $$
 \text{undistorted} = K [R | t] \text{world\_point}
 $$
