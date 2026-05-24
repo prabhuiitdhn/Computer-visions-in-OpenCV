@@ -3844,6 +3844,7 @@ $$
 - Inference: batch statistics unavailable (single sample or small batch). Must use pre-computed running statistics.
 
 **Running average:**
+
 $$
 \mu_{\text{running}} \leftarrow (1-\alpha) \mu_{\text{running}} + \alpha \mu_{\text{batch}}
 $$
@@ -3860,8 +3861,9 @@ If training and inference statistics differ (domain shift), BatchNorm performanc
 **A:** Gradient clipping caps gradient magnitude to prevent exploding gradients.
 
 **Formula:**
+
 $$
-g' = g \cdot \min(1, \frac{\text{max\_norm}}{|g|})
+g' = g \cdot \min(1, \frac{\text{max norm}}{|g|})
 $$
 
 If gradient norm exceeds threshold, scale down to threshold.
