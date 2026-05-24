@@ -1911,6 +1911,7 @@ Image retrieval is evolving:
 3. **Optimization:** minimize content loss (match content features) + style loss (match Gram matrices).
 
 **Content loss:**
+
 $$
 L_{\text{content}} = \frac{1}{2} \sum_{i,j} (F^l_{ij} - P^l_{ij})^2
 $$
@@ -1918,6 +1919,7 @@ $$
 where $F, P$ are feature maps of generated image and content image.
 
 **Style loss:**
+
 $$
 L_{\text{style}} = \sum_l w_l \sum_{j,k} (G^l_{jk} - A^l_{jk})^2
 $$
@@ -1925,6 +1927,7 @@ $$
 where $G, A$ are Gram matrices of generated and style images.
 
 **Total loss:**
+
 $$
 L_{\text{total}} = \alpha L_{\text{content}} + \beta L_{\text{style}}
 $$
