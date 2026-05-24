@@ -2197,6 +2197,7 @@ Train single CNN for:
 2. **Task-specific decoders:** output predictions for each task.
 
 **Loss combination:**
+
 $$
 L_{\text{total}} = \alpha_1 L_1 + \alpha_2 L_2 + \ldots + \alpha_n L_n
 $$
@@ -2211,9 +2212,11 @@ Weights $\alpha_i$ balance tasks (harder tasks may need higher weight).
 
 **Solutions:**
 1. **Task weighting:** learnable weights (uncertainty weighting).
-   $$
-   L = \sum_i \frac{1}{\sigma_i^2} L_i + \lambda \log \sigma_i
-   $$
+
+$$
+L = \sum_i \frac{1}{\sigma_i^2} L_i + \lambda \log \sigma_i
+$$
+
    Higher uncertainty → lower weight.
 
 2. **Curriculum learning:** train easy tasks first, then hard tasks.
