@@ -2258,6 +2258,7 @@ Multi-task learning is fundamental to modern vision:
    - **Morphological filters:** erosion, dilation (binary image processing).
 
 **Convolution formula:**
+
 $$
 g(x, y) = \sum_{i=-n}^{n} \sum_{j=-n}^{n} f(x+i, y+j) \cdot h(i, j)
 $$
