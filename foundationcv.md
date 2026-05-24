@@ -2280,21 +2280,7 @@ Filtering is ubiquitous: every vision algorithm uses it (downsampling, edge dete
 **Sobel kernels:**
 
 $$
-S_x = \left[
-\begin{array}{ccc}
--1 & 0 & 1 \\
--2 & 0 & 2 \\
--1 & 0 & 1
-\end{array}
-\right],
-\quad
-S_y = \left[
-\begin{array}{ccc}
--1 & -2 & -1 \\
-0 & 0 & 0 \\
-1 & 2 & 1
-\end{array}
-\right]
+S_x = \begin{bmatrix} -1 & 0 & 1 \\ -2 & 0 & 2 \\ -1 & 0 & 1 \end{bmatrix}, \quad S_y = \begin{bmatrix} -1 & -2 & -1 \\ 0 & 0 & 0 \\ 1 & 2 & 1 \end{bmatrix}
 $$
 
 $S_x$ detects vertical edges (horizontal gradient); $S_y$ detects horizontal edges (vertical gradient).
