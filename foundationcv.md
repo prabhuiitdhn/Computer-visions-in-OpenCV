@@ -240,8 +240,9 @@ BatchNorm is empirically very powerful, but the theoretical understanding is sti
 
 **Test-time behavior:**
 At test time, batch statistics are unavailable (only one or a few samples). Instead, running estimates (exponential moving average) from training are used:
+
 $$
-\mu_{test} = \text{EMA}(\mu_B), \quad \sigma_{test} = \text{EMA}(\sigma_B)
+\mu_{\text{test}} = \text{EMA}(\mu_B), \quad \sigma_{\text{test}} = \text{EMA}(\sigma_B)
 $$
 
 This decoupling between train and test can cause domain shift if training and test distributions differ.
