@@ -951,6 +951,7 @@ Modern approaches (e.g., SegFormer, Mask2Former) treat boundaries implicitly thr
 
 **Brightness constancy assumption:**
 A pixel's intensity doesn't change between frames (or changes predictably):
+
 $$
 I(x, y, t) = I(x + u, y + v, t + \Delta t)
 $$
@@ -959,6 +960,7 @@ where $(u, v)$ is the optical flow.
 
 **Lucas-Kanade method:**
 Assume all pixels in a small neighborhood have the same flow. Solve:
+
 $$
 \begin{bmatrix} I_x & I_y \\ I_x & I_y \\ \vdots & \vdots \end{bmatrix} \begin{bmatrix} u \\ v \end{bmatrix} = -\begin{bmatrix} I_t \\ I_t \\ \vdots \end{bmatrix}
 $$
