@@ -3755,15 +3755,19 @@ Pose estimation is critical for robotics and AR. Challenges:
    - Prone to imbalance (ignore class > overall accuracy).
 
 2. **IoU (Intersection over Union, Jaccard index):**
-   $$
-   \text{IoU} = \frac{|A \cap B|}{|A \cup B|}
-   $$
+
+$$
+\text{IoU} = \frac{|A \cap B|}{|A \cup B|}
+$$
+
    Per-class IoU, then average (mIoU).
 
 3. **Dice coefficient:**
-   $$
-   \text{Dice} = \frac{2|A \cap B|}{|A| + |B|}
-   $$
+
+$$
+\text{Dice} = \frac{2|A \cap B|}{|A| + |B|}
+$$
+
    Similar to IoU, slightly different weighting.
 
 4. **F1 score:** harmonic mean of precision and recall.
