@@ -531,8 +531,9 @@ ViT sparked a paradigm shift:
 **A:** A GAN has two networks competing: a Generator (creates fake images) and a Discriminator (classifies real vs. fake). The generator tries to fool the discriminator; the discriminator tries to catch the generator.
 
 **Game theory formulation:**
+
 $$
-\min_G \max_D \mathbb{E}_{x \sim p_{data}}[\log D(x)] + \mathbb{E}_{z \sim p_z}[\log(1 - D(G(z)))]
+\min_G \max_D \mathbb{E}_{x \sim p_{\text{data}}}[\log D(x)] + \mathbb{E}_{z \sim p_z}[\log(1 - D(G(z)))]
 $$
 
 The generator minimizes the discriminator's ability to distinguish real from fake; the discriminator maximizes this ability.
