@@ -2278,6 +2278,7 @@ Filtering is ubiquitous: every vision algorithm uses it (downsampling, edge dete
 **A:** The Sobel operator computes image gradients (directional derivatives) using 3×3 kernels, enabling edge detection.
 
 **Sobel kernels:**
+
 $$
 S_x = \left[
 \begin{array}{ccc}
@@ -2299,6 +2300,7 @@ $$
 $S_x$ detects vertical edges (horizontal gradient); $S_y$ detects horizontal edges (vertical gradient).
 
 **Gradient magnitude and direction:**
+
 $$
 G = \sqrt{S_x^2 + S_y^2}, \quad \theta = \operatorname{atan2}(S_y, S_x)
 $$
@@ -2365,6 +2367,7 @@ Hyperparameter tuning (threshold values) is crucial for good results.
 **A:** Thresholding converts grayscale image to binary (black/white) by comparing pixel intensity to threshold. It is fundamental for image segmentation and preprocessing.
 
 **Simple thresholding:**
+
 $$
 B(x, y) = \begin{cases} 255 & \text{if } I(x, y) > T \\ 0 & \text{otherwise} \end{cases}
 $$
@@ -2379,17 +2382,21 @@ $$
    - Find threshold that minimizes within-class variance.
    - Assumes bimodal histogram (two clear peaks: foreground and background).
    - Widely used, no parameters.
-   $$
-   \sigma_w^2(t) = w_0(t) \sigma_0^2(t) + w_1(t) \sigma_1^2(t)
-   $$
+
+$$
+\sigma_w^2(t) = w_0(t) \sigma_0^2(t) + w_1(t) \sigma_1^2(t)
+$$
+
    Minimize over all thresholds $t$.
 
 3. **Adaptive thresholding:**
    - Different threshold for each region (neighborhood).
    - Handles illumination variations.
-   $$
-   T(x, y) = \text{mean}(\text{neighborhood}) - C
-   $$
+
+$$
+T(x, y) = \text{mean}(\text{neighborhood}) - C
+$$
+
    where $C$ is constant offset.
 
 4. **Multi-level thresholding:**
@@ -2418,28 +2425,32 @@ Thresholding is simple but often effective. In practice:
 1. **Erosion:**
    - Output pixel = 1 if all pixels in structuring element neighborhood are 1.
    - Shrinks white regions, removes small objects.
-   $$
-   E(x, y) = \min_{(i,j) \in SE} I(x+i, y+j)
-   $$
+
+$$
+E(x, y) = \min_{(i,j) \in SE} I(x+i, y+j)
+$$
 
 2. **Dilation:**
    - Output pixel = 1 if any pixel in structuring element neighborhood is 1.
    - Expands white regions, fills holes.
-   $$
-   D(x, y) = \max_{(i,j) \in SE} I(x+i, y+j)
-   $$
+
+$$
+D(x, y) = \max_{(i,j) \in SE} I(x+i, y+j)
+$$
 
 3. **Opening:** Erosion followed by dilation.
    - Removes small objects, smooths boundaries.
-   $$
-   \text{Open} = D(E(I))
-   $$
+
+$$
+\text{Open} = D(E(I))
+$$
 
 4. **Closing:** Dilation followed by erosion.
    - Fills small holes, smooths boundaries.
-   $$
-   \text{Close} = E(D(I))
-   $$
+
+$$
+\text{Close} = E(D(I))
+$$
 
 **Structuring elements:**
 - Disk, square, line shapes.
@@ -2472,6 +2483,7 @@ Morphological operations are shape-aware filtering:
 **For line detection:**
 - A line can be represented by parameters instead of listing all its pixels.
 - Common form:
+
 $$
 r = x \cos\theta + y \sin\theta
 $$
@@ -2584,15 +2596,19 @@ Histograms are fast, interpretable, but low-level. Often combined with spatial i
 **Algorithm:**
 1. Compute image derivatives $I_x, I_y$.
 2. Compute structure tensor (second moment matrix):
-   $$
-   M = \begin{bmatrix} I_x^2 & I_x I_y \\ I_x I_y & I_y^2 \end{bmatrix}
-   $$
+
+$$
+M = \begin{bmatrix} I_x^2 & I_x I_y \\ I_x I_y & I_y^2 \end{bmatrix}
+$$
+
    (average over neighborhood).
 
 3. Compute Harris response:
-   $$
-   R = \det(M) - \alpha \cdot \text{trace}(M)^2 = \lambda_1 \lambda_2 - \alpha(\lambda_1 + \lambda_2)^2
-   $$
+
+$$
+R = \det(M) - \alpha \cdot \text{trace}(M)^2 = \lambda_1 \lambda_2 - \alpha(\lambda_1 + \lambda_2)^2
+$$
+
    where $\lambda_1, \lambda_2$ are eigenvalues of $M$.
 
 4. Peaks in $R$ are corner locations.
@@ -2804,6 +2820,7 @@ Note: kernel $g$ is not flipped.
 
 **Template matching via correlation:**
 Find location of template $T$ in image $I$:
+
 $$
 C(x, y) = \sum_{i,j} I(x+i, y+j) \cdot T(i, j)
 $$
@@ -2819,11 +2836,13 @@ Understanding convolution vs. correlation is fundamental to signal processing. M
 **A:** The Laplacian is a second-derivative operator detecting edges and blobs. LoG combines Laplacian with Gaussian smoothing for robust multi-scale blob detection.
 
 **Laplacian operator:**
+
 $$
 \nabla^2 I = \frac{\partial^2 I}{\partial x^2} + \frac{\partial^2 I}{\partial y^2}
 $$
 
 **2D Laplacian kernel:**
+
 $$
 L = \begin{bmatrix} 0 & -1 & 0 \\ -1 & 4 & -1 \\ 0 & -1 & 0 \end{bmatrix}
 $$
@@ -2834,6 +2853,7 @@ $$
 - Sensitive to noise (amplifies high-frequency).
 
 **Laplacian of Gaussian (LoG):**
+
 $$
 \nabla^2 G(x, y, \sigma) = -\frac{1}{\pi \sigma^4} (1 - \frac{x^2 + y^2}{2\sigma^2}) \exp(-\frac{x^2 + y^2}{2\sigma^2})
 $$
@@ -2852,6 +2872,7 @@ First smooth with Gaussian, then apply Laplacian.
 
 **Relation to DoG (Difference of Gaussians):**
 DoG approximates LoG:
+
 $$
 \nabla^2 G \approx \frac{G(x, y, \sigma_1) - G(x, y, \sigma_2)}{\sigma_1 - \sigma_2}
 $$
@@ -3057,6 +3078,7 @@ Color quantization is simple but effective. K-means provides good quality. Moder
 **A:** The Fourier transform converts image from spatial domain to frequency domain, enabling frequency-based analysis and filtering.
 
 **2D Fourier transform:**
+
 $$
 F(u, v) = \sum_{x=0}^{M-1} \sum_{y=0}^{N-1} f(x, y) e^{-j2\pi(ux/M + vy/N)}
 $$
@@ -3097,6 +3119,7 @@ Frequency domain is powerful for understanding image properties and designing fi
 **A:** Power spectrum is squared magnitude of Fourier transform, revealing energy distribution across frequencies. It reveals image characteristics.
 
 **Power spectrum:**
+
 $$
 P(u, v) = |F(u, v)|^2
 $$
@@ -3140,19 +3163,23 @@ Power spectrum provides compact, interpretable image descriptor. Combined with o
 **Similarity metrics:**
 
 1. **Cross-correlation:**
-   $$
-   CC(x, y) = \sum_{i,j} I(x+i, y+j) \cdot T(i, j)
-   $$
+
+$$
+CC(x, y) = \sum_{i,j} I(x+i, y+j) \cdot T(i, j)
+$$
 
 2. **Sum of squared differences:**
-   $$
-   SSD(x, y) = \sum_{i,j} (I(x+i, y+j) - T(i, j))^2
-   $$
+
+$$
+SSD(x, y) = \sum_{i,j} (I(x+i, y+j) - T(i, j))^2
+$$
 
 3. **Normalized cross-correlation:**
-   $$
-   NCC(x, y) = \frac{\sum_{i,j} (I(x+i, y+j) - \bar{I})(T(i, j) - \bar{T})}{\sqrt{\sum (I - \bar{I})^2 \sum (T - \bar{T})^2}}
-   $$
+
+$$
+NCC(x, y) = \frac{\sum_{i,j} (I(x+i, y+j) - \bar{I})(T(i, j) - \bar{T})}{\sqrt{\sum (I - \bar{I})^2 \sum (T - \bar{T})^2}}
+$$
+
    Invariant to illumination changes.
 
 **Challenges:**
@@ -3433,6 +3460,7 @@ Watershed is classical but still used (especially with markers). Deep learning a
 **A:** Distance transform computes distance from each pixel to nearest non-zero pixel, useful for shape analysis, thinning, and geometrical operations.
 
 **Definition:**
+
 $$
 D(x, y) = \min_{(x', y') \in \text{non-zero}} \text{distance}((x, y), (x', y'))
 $$
@@ -3507,9 +3535,10 @@ Thinning is important preprocessing for line-based feature extraction. Modern ap
    - More robust than RGB (hue invariant to brightness).
 
 2. **Backprojection:** for each image pixel, look up histogram bin, assign probability:
-   $$
-   \text{BP}(x, y) = \text{histogram}[HSV(x, y)]
-   $$
+
+$$
+\text{BP}(x, y) = \text{histogram}[HSV(x, y)]
+$$
 
 3. **Result:** probability map where high values indicate target color likelihood.
 
