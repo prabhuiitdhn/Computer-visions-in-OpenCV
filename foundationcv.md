@@ -741,6 +741,7 @@ Anchor-free gained traction with attention-based detectors (DETR, Deformable DET
 **A:** Focal loss down-weights easy (background) samples and focuses training on hard (object) examples, addressing the class imbalance problem in object detection.
 
 **Standard cross-entropy:**
+
 $$
 \text{CE}(p, y) = -y \log(p) - (1-y) \log(1-p)
 $$
@@ -748,6 +749,7 @@ $$
 For an image with 10 objects and 10,000 background pixels, 99.9% of samples are background. The loss is dominated by easy negatives.
 
 **Focal loss:**
+
 $$
 \text{FL}(p, y) = -\alpha_t (1 - p_t)^\gamma \log(p_t)
 $$
