@@ -447,8 +447,9 @@ Modern networks balance depth and skip density to optimize gradient flow.
 - **Attention:** dynamic receptive field (can look at any position), position-dependent weights.
 
 **Scaled dot-product attention:**
+
 $$
-\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V
+\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^{\top}}{\sqrt{d_k}}\right)V
 $$
 
 where:
@@ -472,6 +473,7 @@ where:
 
 **Multi-head attention:**
 Use multiple attention heads in parallel, each focusing on different aspects:
+
 $$
 \text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1, \ldots, \text{head}_h)W^O
 $$
