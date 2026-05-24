@@ -2138,9 +2138,10 @@ ReID is advancing toward:
 1. **VGGFace:** first CNN-based face recognition.
 2. **FaceNet:** triplet loss for learning face embeddings. Goal: same person close, different people far.
 3. **ArcFace:** angular margin loss. Directly optimize angular distance in hypersphere.
-   $$
-   L = -\log \frac{e^{s(\cos(\theta_i + m))}}{e^{s(\cos(\theta_i + m))} + \sum_{j \neq i} e^{s \cos \theta_j}}
-   $$
+
+$$
+L = -\log \frac{e^{s(\cos(\theta_i + m))}}{e^{s(\cos(\theta_i + m))} + \sum_{j \neq i} e^{s \cos \theta_j}}
+$$
 
 **Loss functions:**
 1. **Triplet loss:** $(D(a,p) - D(a,n) + \alpha)^+$.
