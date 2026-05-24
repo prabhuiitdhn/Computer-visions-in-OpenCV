@@ -3972,7 +3972,12 @@ Good luck with your interview!
 **A:**
 
 #### 1. Mean (Box) Filter
-- **Kernel:** All elements equal, normalized: $K = \frac{1}{n^2} \begin{bmatrix} 1 & 1 & \cdots \\ 1 & 1 & \cdots \\ \vdots & & \ddots \end{bmatrix}$
+- **Kernel:** All elements equal, normalized:
+
+$$
+K = \frac{1}{n^2} \begin{bmatrix} 1 & 1 & \cdots \\ 1 & 1 & \cdots \\ \vdots & & \ddots \end{bmatrix}
+$$
+
 - **Effect:** Uniform averaging → blurs image, reduces Gaussian noise
 - **Trade-off:** Blurs edges equally — poor edge preservation
 - **Use when:** Quick denoising where edge sharpness is not critical
@@ -3985,25 +3990,45 @@ Good luck with your interview!
 - **Use when:** Pre-processing before edge detection, scale-space construction
 
 #### 3. Sharpening Filter
-- **Kernel:** $K = \begin{bmatrix} 0 & -1 & 0 \\ -1 & 5 & -1 \\ 0 & -1 & 0 \end{bmatrix}$ (identity + scaled Laplacian)
+- **Kernel:** (identity + scaled Laplacian)
+
+$$
+K = \begin{bmatrix} 0 & -1 & 0 \\ -1 & 5 & -1 \\ 0 & -1 & 0 \end{bmatrix}
+$$
+
 - **Effect:** Enhances edges and fine details
 - **Principle:** Original + α × (Original − Blurred) = Sharpened
 - **Use when:** Enhancing details in medical images, satellite imagery
 
 #### 4. Sobel Filter (1st derivative)
-- **Kernels:** $S_x = \begin{bmatrix} -1 & 0 & 1 \\ -2 & 0 & 2 \\ -1 & 0 & 1 \end{bmatrix}$, $S_y = \begin{bmatrix} -1 & -2 & -1 \\ 0 & 0 & 0 \\ 1 & 2 & 1 \end{bmatrix}$
+- **Kernels:**
+
+$$
+S_x = \begin{bmatrix} -1 & 0 & 1 \\ -2 & 0 & 2 \\ -1 & 0 & 1 \end{bmatrix}, \quad S_y = \begin{bmatrix} -1 & -2 & -1 \\ 0 & 0 & 0 \\ 1 & 2 & 1 \end{bmatrix}
+$$
+
 - **Effect:** Detects edges — $S_x$ finds vertical edges, $S_y$ finds horizontal edges
 - **Magnitude:** $M = \sqrt{G_x^2 + G_y^2}$, **Direction:** $\theta = \arctan(G_y / G_x)$
 - **Use when:** Edge detection, gradient computation, feature extraction
 
 #### 5. Laplacian Filter (2nd derivative)
-- **Kernel:** $L = \begin{bmatrix} 0 & 1 & 0 \\ 1 & -4 & 1 \\ 0 & 1 & 0 \end{bmatrix}$
+- **Kernel:**
+
+$$
+L = \begin{bmatrix} 0 & 1 & 0 \\ 1 & -4 & 1 \\ 0 & 1 & 0 \end{bmatrix}
+$$
+
 - **Effect:** Detects edges in ALL directions (isotropic), highlights regions of rapid intensity change
 - **Sensitive to noise:** Usually applied after Gaussian smoothing (→ Laplacian of Gaussian / LoG)
 - **Use when:** Blob detection, zero-crossing edge detection
 
 #### 6. Emboss Filter
-- **Kernel:** $E = \begin{bmatrix} -2 & -1 & 0 \\ -1 & 1 & 1 \\ 0 & 1 & 2 \end{bmatrix}$
+- **Kernel:**
+
+$$
+E = \begin{bmatrix} -2 & -1 & 0 \\ -1 & 1 & 1 \\ 0 & 1 & 2 \end{bmatrix}
+$$
+
 - **Effect:** Creates 3D shadow/relief effect by emphasizing directional gradients
 - **Use when:** Artistic effects, texture analysis
 
