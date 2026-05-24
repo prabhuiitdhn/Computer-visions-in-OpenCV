@@ -1439,6 +1439,7 @@ Use the data as its own label. For example, predict future frames from past fram
    - Force network to learn invariances to augmentation.
 
    Loss (NT-Xent):
+
    $$
    \mathcal{L}_i = -\log \frac{\exp(\text{sim}(z_i, z_j) / \tau)}{\sum_{k=1}^{2N} \exp(\text{sim}(z_i, z_k) / \tau)}
    $$
