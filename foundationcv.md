@@ -1874,9 +1874,10 @@ Tracking applications differ:
 **Deep metric learning:**
 1. **Siamese networks:** twin branches, learn to distinguish same/different pairs.
 2. **Triplet loss:** push positive pair together, negative pair apart.
-   $$
-   \mathcal{L} = \max(d(a, p) - d(a, n) + \alpha, 0)
-   $$
+
+$$
+\mathcal{L} = \max(d(a, p) - d(a, n) + \alpha, 0)
+$$
 
 3. **Hard negative mining:** focus on difficult (hard) negatives.
 4. **Multi-scale retrieval:** use features from multiple layers for robustness.
