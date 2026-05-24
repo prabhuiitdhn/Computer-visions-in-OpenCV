@@ -68,9 +68,12 @@ Convolutional Neural Networks (CNNs) learn kernels via backpropagation, automati
 - **Stride:** if stride=1, the kernel moves 1 pixel at a time; if stride=2, it jumps 2 pixels.
 
 **Output size formula:**
+
 $$
-\text{Output size} = \left\lfloor \frac{\text{Input size} - \text{Kernel size} + 2 \times \text{Padding}}{\text{Stride}} \right\rfloor + 1
+O = \left\lfloor \frac{I - K + 2P}{S} \right\rfloor + 1
 $$
+
+where $I$ = input size, $K$ = kernel size, $P$ = padding, $S$ = stride.
 
 **Common padding types:**
 1. **Valid (no padding):** output shrinks. For 32×32 image and 3×3 kernel with stride=1: output is 30×30.
