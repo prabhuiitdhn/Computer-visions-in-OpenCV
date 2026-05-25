@@ -1804,8 +1804,9 @@ Scene understanding is moving toward:
 - Single unified metric (PQ: Panoptic Quality) better reflects practical needs than separate metrics.
 
 **Panoptic Quality (PQ):**
+
 $$
-\text{PQ} = \frac{\text{TP}}{\text{TP} + 0.5 \cdot \text{FP} + 0.5 \cdot \text{FN}} \times \text{Mean IoU}
+\text{PQ} = \frac{|TP|}{|TP| + \frac{1}{2}|FP| + \frac{1}{2}|FN|} \times \frac{\sum_{(p,g) \in TP} \text{IoU}(p,g)}{|TP|}
 $$
 
 Accounts for both detection rate and IoU (quality).
