@@ -2890,13 +2890,17 @@ Warping is coordinate transformation + resampling. Accuracy depends on a good tr
 
 **Convolution:**
 
-   conv(x, y) = sum over i,j of f(i, j) * g(x - i, y - j)
+$$
+(f * g)(x, y) = \sum_{i,j} f(i, j) \cdot g(x - i, y - j)
+$$
 
 Note: kernel $g$ is flipped (negative indices).
 
 **Correlation:**
 
-   corr(x, y) = sum over i,j of f(i, j) * g(x + i, y + j)
+$$
+(f \star g)(x, y) = \sum_{i,j} f(i, j) \cdot g(x + i, y + j)
+$$
 
 Note: kernel $g$ is not flipped.
 
@@ -2919,6 +2923,7 @@ Find location of template $T$ in image $I$:
 $$
 C(x, y) = \sum_{i,j} I(x+i, y+j) \cdot T(i, j)
 $$
+
 Peak at $(x, y)$ indicates template location.
 
 **Expert perspective:**
