@@ -1,0 +1,209 @@
+<mxfile host="app.diagrams.net" modified="2026-05-25" agent="GitHub Copilot" version="21.0.0">
+    <diagram id="ml-pipeline-roles" name="ML Pipeline by Role — Swimlane">
+        <mxGraphModel dx="1900" dy="1100" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="1100" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+
+                <!-- ════════════════════════════════════════════════════ -->
+                <!-- TITLE                                                 -->
+                <!-- ════════════════════════════════════════════════════ -->
+                <mxCell id="title" value="&lt;b&gt;&lt;font style=&quot;font-size:18px;&quot;&gt;Full Machine Learning Pipeline&lt;/font&gt;&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;&quot; color=&quot;#555555&quot;&gt;Data Acquisition → Model Deployment  ·  Roles: Data Engineer | Data Analyst | Data Scientist | ML Engineer&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+                    <mxGeometry x="20" y="12" width="1860" height="55" as="geometry"/>
+                </mxCell>
+
+                <!-- ════════════════════════════════════════════════════ -->
+                <!-- ROW 1 — DATA ENGINEER  (Steps 1–4)                   -->
+                <!-- ════════════════════════════════════════════════════ -->
+                <mxCell id="de_bg" value="" style="rounded=1;arcSize=3;fillColor=#FFF3E0;strokeColor=#E65100;strokeWidth=2;" vertex="1" parent="1">
+                    <mxGeometry x="20" y="85" width="1860" height="175" as="geometry"/>
+                </mxCell>
+                <mxCell id="de_hdr" value="&lt;b&gt;&lt;font style=&quot;font-size:14px;&quot;&gt;Data&lt;br&gt;Engineer&lt;/font&gt;&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Steps 1–4&lt;/font&gt;" style="rounded=1;arcSize=3;fillColor=#E65100;strokeColor=#BF360C;strokeWidth=2;fontColor=#FFFFFF;verticalAlign=middle;align=center;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="20" y="85" width="155" height="175" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="s1" value="&lt;b&gt;1. Data Acquisition&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;• Sensors / cameras / APIs&lt;br&gt;• Web scraping / crawling&lt;br&gt;• Public datasets (ImageNet, COCO)&lt;br&gt;• Internal / proprietary data&lt;br&gt;• Simulated / synthetic data&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+                    <mxGeometry x="195" y="107" width="320" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="s2" value="&lt;b&gt;2. Data Annotation / Labelling&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;• Manual labelling (LabelImg, CVAT)&lt;br&gt;• Crowdsourcing (Mech. Turk)&lt;br&gt;• Weak / semi-automatic labelling&lt;br&gt;• Annotation schema definition&lt;br&gt;• Quality review &amp; IAA check&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+                    <mxGeometry x="535" y="107" width="320" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="s3" value="&lt;b&gt;3. Data Preprocessing&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;• Resize / normalize / standardize&lt;br&gt;• Denoise, histogram equalization&lt;br&gt;• Handle missing values / outliers&lt;br&gt;• Format conversion (→ TFRecord)&lt;br&gt;• Train / Val / Test split&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+                    <mxGeometry x="875" y="107" width="320" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="s4" value="&lt;b&gt;4. Data Augmentation&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;• Flip, rotate, crop, scale&lt;br&gt;• Colour jitter, brightness, contrast&lt;br&gt;• MixUp, CutOut, CutMix&lt;br&gt;• Mosaic (YOLOv4+)&lt;br&gt;• Generative augmentation (GAN/Diff)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+                    <mxGeometry x="1215" y="107" width="320" height="130" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" source="s1" target="s2" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+                <mxCell id="e23" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82b366;strokeWidth=2;" edge="1" source="s2" target="s3" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+                <mxCell id="e34" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82b366;strokeWidth=2;" edge="1" source="s3" target="s4" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+                <!-- ════════════════════════════════════════════════════ -->
+                <!-- ROW 2 — DATA ANALYST  (Steps 5–6)                    -->
+                <!-- ════════════════════════════════════════════════════ -->
+                <mxCell id="da_bg" value="" style="rounded=1;arcSize=3;fillColor=#F1F8E9;strokeColor=#2E7D32;strokeWidth=2;" vertex="1" parent="1">
+                    <mxGeometry x="20" y="278" width="1860" height="175" as="geometry"/>
+                </mxCell>
+                <mxCell id="da_hdr" value="&lt;b&gt;&lt;font style=&quot;font-size:14px;&quot;&gt;Data&lt;br&gt;Analyst&lt;/font&gt;&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Steps 5–6&lt;/font&gt;" style="rounded=1;arcSize=3;fillColor=#2E7D32;strokeColor=#1B5E20;strokeWidth=2;fontColor=#FFFFFF;verticalAlign=middle;align=center;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="20" y="278" width="155" height="175" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="s5" value="&lt;b&gt;5. Exploratory Data Analysis (EDA)&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;• Class distribution / imbalance check&lt;br&gt;• Feature correlation analysis&lt;br&gt;• Visualise samples per class&lt;br&gt;• Identify data quality issues&lt;br&gt;• Baseline statistics (mean, std, range)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+                    <mxGeometry x="195" y="300" width="320" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="s6" value="&lt;b&gt;6. Feature Engineering&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;• Hand-crafted features: HOG, SIFT, LBP&lt;br&gt;• Deep features: CNN embeddings&lt;br&gt;• Dimensionality reduction: PCA, t-SNE&lt;br&gt;• Feature selection (importance scores)&lt;br&gt;• Embedding lookup (text / categories)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+                    <mxGeometry x="535" y="300" width="320" height="130" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="e56" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#d6b656;strokeWidth=2;" edge="1" source="s5" target="s6" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+                <!-- ════════════════════════════════════════════════════ -->
+                <!-- ROW 3 — DATA SCIENTIST  (Steps 7–10)                 -->
+                <!-- ════════════════════════════════════════════════════ -->
+                <mxCell id="ds_bg" value="" style="rounded=1;arcSize=3;fillColor=#E8EAF6;strokeColor=#1A237E;strokeWidth=2;" vertex="1" parent="1">
+                    <mxGeometry x="20" y="471" width="1860" height="175" as="geometry"/>
+                </mxCell>
+                <mxCell id="ds_hdr" value="&lt;b&gt;&lt;font style=&quot;font-size:14px;&quot;&gt;Data&lt;br&gt;Scientist&lt;/font&gt;&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Steps 7–10&lt;/font&gt;" style="rounded=1;arcSize=3;fillColor=#1A237E;strokeColor=#0D47A1;strokeWidth=2;fontColor=#FFFFFF;verticalAlign=middle;align=center;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="20" y="471" width="155" height="175" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="s7" value="&lt;b&gt;7. Model Selection &amp; Architecture&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;• Task: classification / detection / seg&lt;br&gt;• CNN, ViT, RNN, Transformer, GNN&lt;br&gt;• Pre-trained backbone (ResNet, ViT-L)&lt;br&gt;• Transfer learning vs. train from scratch&lt;br&gt;• Inductive bias matching task&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+                    <mxGeometry x="195" y="493" width="320" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="s8" value="&lt;b&gt;8. Model Training&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;• Loss function (CE, Focal, IoU, CTC)&lt;br&gt;• Optimiser (SGD, Adam, AdamW)&lt;br&gt;• LR scheduler (cosine, warmup)&lt;br&gt;• Mixed-precision (FP16 / BF16)&lt;br&gt;• Experiment tracking (MLflow, W&amp;B)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+                    <mxGeometry x="535" y="493" width="320" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="s9" value="&lt;b&gt;9. Model Evaluation&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;• Accuracy, Precision, Recall, F1&lt;br&gt;• mAP (detection), mIoU (segmentation)&lt;br&gt;• Confusion matrix analysis&lt;br&gt;• Error analysis per class / slice&lt;br&gt;• Bias &amp; fairness evaluation&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+                    <mxGeometry x="875" y="493" width="320" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="s10" value="&lt;b&gt;10. Hyperparameter Tuning&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;• Grid / random / Bayesian search&lt;br&gt;• LR, batch size, weight decay&lt;br&gt;• Architecture search (NAS)&lt;br&gt;• Optuna, Ray Tune, W&amp;B Sweeps&lt;br&gt;• Cross-validation&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+                    <mxGeometry x="1215" y="493" width="320" height="130" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="e78" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#d79b00;strokeWidth=2;" edge="1" source="s7" target="s8" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+                <mxCell id="e89" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#b85450;strokeWidth=2;" edge="1" source="s8" target="s9" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+                <mxCell id="e910" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#b85450;strokeWidth=2;" edge="1" source="s9" target="s10" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+                <!-- ════════════════════════════════════════════════════ -->
+                <!-- ROW 4 — ML ENGINEER  (Steps 11–15)                   -->
+                <!-- ════════════════════════════════════════════════════ -->
+                <mxCell id="mle_bg" value="" style="rounded=1;arcSize=3;fillColor=#F3E5F5;strokeColor=#4A148C;strokeWidth=2;" vertex="1" parent="1">
+                    <mxGeometry x="20" y="664" width="1860" height="175" as="geometry"/>
+                </mxCell>
+                <mxCell id="mle_hdr" value="&lt;b&gt;&lt;font style=&quot;font-size:14px;&quot;&gt;ML&lt;br&gt;Engineer&lt;/font&gt;&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Steps 11–15&lt;/font&gt;" style="rounded=1;arcSize=3;fillColor=#4A148C;strokeColor=#38006b;strokeWidth=2;fontColor=#FFFFFF;verticalAlign=middle;align=center;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="20" y="664" width="155" height="175" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="s11" value="&lt;b&gt;11. Model Compression&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;• Pruning (structured / unstructured)&lt;br&gt;• Quantisation (INT8, FP16)&lt;br&gt;• Knowledge distillation&lt;br&gt;• TensorRT / ONNX export&lt;br&gt;• FLOP / memory profiling&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+                    <mxGeometry x="195" y="686" width="295" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="s12" value="&lt;b&gt;12. Final Testing &amp; Validation&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;• Hold-out test set evaluation&lt;br&gt;• A/B testing vs. baseline model&lt;br&gt;• Stress testing (OOD / edge cases)&lt;br&gt;• Latency &amp; throughput benchmark&lt;br&gt;• Regression testing&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+                    <mxGeometry x="505" y="686" width="295" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="s13" value="&lt;b&gt;13. CI/CD &amp; MLOps&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;• Model versioning (DVC, MLflow)&lt;br&gt;• Automated retraining pipelines&lt;br&gt;• Data versioning &amp; lineage&lt;br&gt;• Docker / containerisation&lt;br&gt;• GitHub Actions / Jenkins CI&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+                    <mxGeometry x="815" y="686" width="295" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="s14" value="&lt;b&gt;14. Model Deployment ★&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;• REST API (FastAPI, TorchServe)&lt;br&gt;• Cloud: SageMaker / Vertex AI&lt;br&gt;• Edge: ONNX / TFLite / TensorRT&lt;br&gt;• Batch vs. real-time inference&lt;br&gt;• Blue-green / canary deployment&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=3;fontStyle=1;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+                    <mxGeometry x="1125" y="686" width="295" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="s15" value="&lt;b&gt;15. Monitoring &amp; Feedback Loop&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;• Data drift detection (KL divergence)&lt;br&gt;• Model performance tracking&lt;br&gt;• Alerting on accuracy degradation&lt;br&gt;• Human-in-the-loop review&lt;br&gt;• Retraining trigger → back to Step 1&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+                    <mxGeometry x="1435" y="686" width="295" height="130" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="e1112" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#9673a6;strokeWidth=2;" edge="1" source="s11" target="s12" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+                <mxCell id="e1213" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#9673a6;strokeWidth=2;" edge="1" source="s12" target="s13" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+                <mxCell id="e1314" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" source="s13" target="s14" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+                <mxCell id="e1415" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" source="s14" target="s15" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+                <!-- ════════════════════════════════════════════════════ -->
+                <!-- CROSS-ROW TRANSITION ARROWS                          -->
+                <!-- ════════════════════════════════════════════════════ -->
+
+                <!-- s4 (DE end) → s5 (DA start): wrap to next row -->
+                <mxCell id="e_de_da" value="handoff" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#555555;strokeWidth=2.5;dashed=0;fontSize=9;fontStyle=1;fontColor=#555555;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="s4" target="s5" parent="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1375" y="255"/>
+                            <mxPoint x="355" y="255"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+
+                <!-- s6 (DA end) → s7 (DS start): wrap to next row -->
+                <mxCell id="e_da_ds" value="handoff" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#555555;strokeWidth=2.5;dashed=0;fontSize=9;fontStyle=1;fontColor=#555555;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="s6" target="s7" parent="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="695" y="448"/>
+                            <mxPoint x="355" y="448"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+
+                <!-- s10 (DS end) → s11 (MLE start): wrap to next row -->
+                <mxCell id="e_ds_mle" value="handoff" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#555555;strokeWidth=2.5;dashed=0;fontSize=9;fontStyle=1;fontColor=#555555;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="s10" target="s11" parent="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1375" y="641"/>
+                            <mxPoint x="342" y="641"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+
+                <!-- ════════════════════════════════════════════════════ -->
+                <!-- FEEDBACK LOOP  s15 → s1                              -->
+                <!-- ════════════════════════════════════════════════════ -->
+                <mxCell id="e_feedback" value="Retrain Trigger (drift / accuracy drop)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#CC0000;strokeWidth=2.5;dashed=1;fontSize=10;fontStyle=1;fontColor=#CC0000;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="s15" target="s1" parent="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1870" y="751"/>
+                            <mxPoint x="1870" y="42"/>
+                            <mxPoint x="355" y="42"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+
+                <!-- ════════════════════════════════════════════════════ -->
+                <!-- LEGEND                                                -->
+                <!-- ════════════════════════════════════════════════════ -->
+                <mxCell id="leg_bg" value="" style="rounded=1;fillColor=#f5f5f5;strokeColor=#999999;" vertex="1" parent="1">
+                    <mxGeometry x="20" y="862" width="1860" height="110" as="geometry"/>
+                </mxCell>
+                <!-- Legend title -->
+                <mxCell id="leg_t" value="&lt;b&gt;Legend&lt;/b&gt;" style="text;html=1;align=left;fontStyle=1;fontSize=11;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+                    <mxGeometry x="30" y="865" width="80" height="20" as="geometry"/>
+                </mxCell>
+
+                <!-- Step-type color swatches (row 1) -->
+                <mxCell id="lc1b" value="" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="30" y="889" width="16" height="16" as="geometry"/></mxCell>
+                <mxCell id="lt1" value="Data Collection &amp; Labelling (Steps 1–2)" style="text;html=1;fontSize=10;strokeColor=none;fillColor=none;align=left;" vertex="1" parent="1"><mxGeometry x="50" y="887" width="230" height="20" as="geometry"/></mxCell>
+                <mxCell id="lc2b" value="" style="rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="295" y="889" width="16" height="16" as="geometry"/></mxCell>
+                <mxCell id="lt2" value="Preprocessing &amp; Augmentation (Steps 3–4)" style="text;html=1;fontSize=10;strokeColor=none;fillColor=none;align=left;" vertex="1" parent="1"><mxGeometry x="315" y="887" width="245" height="20" as="geometry"/></mxCell>
+                <mxCell id="lc3b" value="" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="575" y="889" width="16" height="16" as="geometry"/></mxCell>
+                <mxCell id="lt3" value="Analysis &amp; Feature Engineering (Steps 5–6)" style="text;html=1;fontSize=10;strokeColor=none;fillColor=none;align=left;" vertex="1" parent="1"><mxGeometry x="595" y="887" width="245" height="20" as="geometry"/></mxCell>
+                <mxCell id="lc4b" value="" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="855" y="889" width="16" height="16" as="geometry"/></mxCell>
+                <mxCell id="lt4" value="Model Selection &amp; Training (Steps 7–8)" style="text;html=1;fontSize=10;strokeColor=none;fillColor=none;align=left;" vertex="1" parent="1"><mxGeometry x="875" y="887" width="230" height="20" as="geometry"/></mxCell>
+                <mxCell id="lc5b" value="" style="rounded=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="1115" y="889" width="16" height="16" as="geometry"/></mxCell>
+                <mxCell id="lt5" value="Evaluation &amp; Tuning (Steps 9–10)" style="text;html=1;fontSize=10;strokeColor=none;fillColor=none;align=left;" vertex="1" parent="1"><mxGeometry x="1135" y="887" width="210" height="20" as="geometry"/></mxCell>
+                <mxCell id="lc6b" value="" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="1355" y="889" width="16" height="16" as="geometry"/></mxCell>
+                <mxCell id="lt6" value="Compression, CI/CD &amp; MLOps (Steps 11–13)" style="text;html=1;fontSize=10;strokeColor=none;fillColor=none;align=left;" vertex="1" parent="1"><mxGeometry x="1375" y="887" width="265" height="20" as="geometry"/></mxCell>
+
+                <!-- Role color swatches (row 2) -->
+                <mxCell id="lr1b" value="" style="rounded=1;fillColor=#FFF3E0;strokeColor=#E65100;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="30" y="916" width="16" height="16" as="geometry"/></mxCell>
+                <mxCell id="lrt1" value="&lt;b&gt;Data Engineer&lt;/b&gt; — Steps 1–4  (Pipelines, ingestion, preprocessing, augmentation)" style="text;html=1;fontSize=10;strokeColor=none;fillColor=none;align=left;" vertex="1" parent="1"><mxGeometry x="50" y="914" width="500" height="20" as="geometry"/></mxCell>
+                <mxCell id="lr2b" value="" style="rounded=1;fillColor=#F1F8E9;strokeColor=#2E7D32;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="575" y="916" width="16" height="16" as="geometry"/></mxCell>
+                <mxCell id="lrt2" value="&lt;b&gt;Data Analyst&lt;/b&gt; — Steps 5–6  (EDA, annotation, feature insights)" style="text;html=1;fontSize=10;strokeColor=none;fillColor=none;align=left;" vertex="1" parent="1"><mxGeometry x="595" y="914" width="420" height="20" as="geometry"/></mxCell>
+                <mxCell id="lr3b" value="" style="rounded=1;fillColor=#E8EAF6;strokeColor=#1A237E;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="1040" y="916" width="16" height="16" as="geometry"/></mxCell>
+                <mxCell id="lrt3" value="&lt;b&gt;Data Scientist&lt;/b&gt; — Steps 7–10  (Modelling, training, evaluation, tuning)" style="text;html=1;fontSize=10;strokeColor=none;fillColor=none;align=left;" vertex="1" parent="1"><mxGeometry x="1060" y="914" width="420" height="20" as="geometry"/></mxCell>
+                <mxCell id="lr4b" value="" style="rounded=1;fillColor=#F3E5F5;strokeColor=#4A148C;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="1505" y="916" width="16" height="16" as="geometry"/></mxCell>
+                <mxCell id="lrt4" value="&lt;b&gt;ML Engineer&lt;/b&gt; — Steps 11–15  (Compression, CI/CD, deployment, monitoring)" style="text;html=1;fontSize=10;strokeColor=none;fillColor=none;align=left;" vertex="1" parent="1"><mxGeometry x="1525" y="914" width="345" height="20" as="geometry"/></mxCell>
+
+                <!-- Shared note -->
+                <mxCell id="shared_note" value="&lt;i&gt;* Role boundaries are shared — e.g. DE &amp; DS both contribute to augmentation; DS &amp; MLE share compression / hyperparameter work.  Red dashed arrow = retraining feedback loop triggered by drift or accuracy drop.&lt;/i&gt;" style="text;html=1;align=left;fontSize=9;strokeColor=none;fillColor=none;fontColor=#777777;" vertex="1" parent="1">
+                    <mxGeometry x="30" y="940" width="1840" height="26" as="geometry"/>
+                </mxCell>
+
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
