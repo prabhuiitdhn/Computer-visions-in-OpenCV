@@ -2775,3 +2775,146 @@ $$\text{Training error} \leq \exp\!\left(-2\sum_{t=1}^{T}\left(\frac{1}{2} - \va
 **Punchline for interviews:**
 > A weak classifier is a Haar feature + threshold + polarity → binary FACE/NON-FACE. Individually brittle (60–70%), but AdaBoost chains 200 of them so each focuses on what previous ones got wrong, and their weighted vote creates a strong classifier (95%+) — provably driving training error to near-zero exponentially fast.
 
+---
+
+### Q: HOG + SVM Face Detector (Dalal & Triggs style) — Sliding window + HOG + Linear SVM + NMS. Dlib uses this.
+
+---
+
+**A (Core Pipeline):**
+
+```
+Image → Image Pyramid → Sliding Window → HOG Features → Linear SVM → NMS → Detections
+```
+
+---
+
+**A (Part 1 — HOG Features):**
+
+**Why gradients instead of raw pixels?**
+Raw pixel values change with lighting. Gradients capture **shape and edge structure** — relatively invariant to illumination.
+
+**Step-by-step HOG on a 128×64 window:**
+
+**Step 1 — Compute gradients at every pixel:**
+```
+Gx = I(x+1,y) - I(x-1,y)
+Gy = I(x,y+1) - I(x,y-1)
+
+Magnitude:  |G| = √(Gx² + Gy²)
+Direction:  θ   = arctan(Gy / Gx)   ∈ [0°, 180°)  (unsigned)
+```
+Unsigned (0–180°) is used because a vertical edge looks the same regardless of which side is brighter.
+
+**Step 2 — Divide window into 8×8 pixel cells:**
+```
+128×64 window → 16×8 = 128 cells
+```
+
+**Step 3 — Build a 9-bin orientation histogram per cell:**
+```
+Bins:  0°  20°  40°  60°  80°  100°  120°  140°  160°
+Each pixel votes into nearest bin, weighted by gradient magnitude.
+```
+
+**Step 4 — Group cells into 2×2 blocks (16×16 px), L2-normalize:**
+```
+Block descriptor = 4 cell histograms = 4×9 = 36 values → L2-normalize
+(handles local illumination changes across adjacent cells)
+```
+
+**Step 5 — Concatenate all block descriptors:**
+```
+105 block positions (50% overlap) × 36 = 3,780-dim HOG vector
+```
+
+**What HOG encodes for faces:**
+- Eye socket arcs → curved gradient patterns
+- Nose bridge → strong vertical gradient
+- Mouth line → strong horizontal gradient
+- Chin/brow contours → curved boundary gradients
+
+---
+
+**A (Part 2 — Linear SVM):**
+
+$$\text{score}(x) = \mathbf{w}^T \phi(x) + b$$
+
+- $\phi(x)$ = 3,780-dim HOG descriptor
+- **Face** if score > 0, **Non-face** if score < 0
+
+| Choice | Reason |
+|--------|--------|
+| Linear (not RBF kernel) | HOG is already high-dim and discriminative |
+| SVM over logistic regression | Maximizes margin → better generalization |
+| Hard-negative mining | Run detector on negatives → false positives become new training examples → retrain (2–3 rounds) |
+
+Hard-negative mining is what makes it actually work — the SVM must see the specific patterns it confuses with faces.
+
+---
+
+**A (Part 3 — Sliding Window + Image Pyramid):**
+
+```
+Scale 1.0: original     → slide 128×64 window, stride 8px
+Scale 0.85: shrink 15%  → slide same window
+Scale 0.72: shrink 15%  → ...
+(~7–10 scales total)
+```
+
+At each position/scale → compute HOG → evaluate SVM → record (x, y, scale, score) if score > threshold.
+Result: hundreds of overlapping detections around true face locations.
+
+---
+
+**A (Part 4 — Non-Maximum Suppression):**
+
+**Greedy NMS:**
+```
+1. Sort detections by SVM score (highest first)
+2. Take top detection D₁ → keep it
+3. Remove all Dᵢ where IoU(D₁, Dᵢ) > 0.5
+4. Take next remaining → keep it, remove overlaps
+5. Repeat until empty
+```
+
+$$\text{IoU}(A, B) = \frac{\text{Area}(A \cap B)}{\text{Area}(A \cup B)}$$
+
+High IoU (>0.5) → same face → suppress lower-score one.
+
+---
+
+**A (Dlib's Frontal Face Detector):**
+
+```python
+import dlib
+detector = dlib.get_frontal_face_detector()
+dets = detector(img, 1)   # 1 = upsample once for small faces
+```
+
+| | Dalal & Triggs | Dlib face detector |
+|--|---|---|
+| Window size | 128×64 | 80×80 |
+| Classifier | Linear SVM | Linear SVM + scan-line trick |
+| Speed | ~1 fps (Python naive) | ~30 fps (optimized C++) |
+| Accuracy | Pedestrian-tuned | ~95% frontal, degrades >30° |
+
+Dlib's speed: **scan-line trick** — adjacent window positions share 7/8 of HOG cells → incremental update instead of full recompute.
+
+---
+
+**A (Comparison Table):**
+
+| Property | Viola-Jones | HOG+SVM (Dlib) | MTCNN/RetinaFace |
+|---------|------------|----------------|-----------------|
+| Features | Haar (intensity) | HOG (gradient) | Learned (CNN) |
+| Accuracy frontal | ~90% | ~95% | ~99%+ |
+| Pose robustness | Frontal only | Frontal ±30° | ±90° |
+| Speed (CPU) | Very fast | Fast | Slow–Medium |
+| Year | 2001 | 2005 (adapted ~2010) | 2016 |
+
+---
+
+**Punchline for interviews:**
+> HOG+SVM detects faces by sliding a window across an image pyramid, computing a 3,780-dim descriptor of oriented gradient histograms per window (capturing the spatial edge layout of faces), and scoring it with a linear SVM trained with hard-negative mining. Multiple overlapping detections are collapsed via greedy IoU-based NMS. Dlib's frontal detector is the canonical implementation — ~95% accuracy on frontal faces, fast on CPU, but degrades beyond ±30° pose because HOG is not rotation-invariant.
+
