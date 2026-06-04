@@ -726,7 +726,7 @@ Face manipulation types:
 **Insight**: Low-quality faces (blur, low-res, extreme pose) should be weighted less.
 
 **MagFace**: embedding magnitude = quality proxy
-$$\mathcal{L}_{mag} = \mathcal{L}_{ArcFace}(\hat{f}) + \lambda g(a)$$
+$$\mathcal{L}_{\text{mag}} = \mathcal{L}_{\text{ArcFace}}(\hat{f}) + \lambda \, g(\|f\|_2)$$
 - Large ||f|| → high quality → larger margin
 - Small ||f|| → low quality → smaller margin (penalized less)
 
@@ -2917,4 +2917,267 @@ Dlib's speed: **scan-line trick** — adjacent window positions share 7/8 of HOG
 
 **Punchline for interviews:**
 > HOG+SVM detects faces by sliding a window across an image pyramid, computing a 3,780-dim descriptor of oriented gradient histograms per window (capturing the spatial edge layout of faces), and scoring it with a linear SVM trained with hard-negative mining. Multiple overlapping detections are collapsed via greedy IoU-based NMS. Dlib's frontal detector is the canonical implementation — ~95% accuracy on frontal faces, fast on CPU, but degrades beyond ±30° pose because HOG is not rotation-invariant.
+
+---
+
+### Q: Face Alignment & Preprocessing — normalize face into canonical pose so the network sees consistent facial geometry.
+
+---
+
+**A (The Core Problem):**
+
+Two photos of the same person — one head-on, one tilted, one close-up — produce **wildly different pixel patterns** even though the identity is identical. A network seeing misaligned faces wastes capacity learning pose variation instead of identity.
+
+Solution: **warp every face into a fixed canonical coordinate frame before the embedding network.**
+
+---
+
+**A (Full Pipeline):**
+
+```
+Raw image
+  ↓
+1. FACE DETECTION        → bounding box (x, y, w, h)
+  ↓
+2. LANDMARK DETECTION    → 5-point or 68-point landmarks
+  ↓
+3. GEOMETRIC TRANSFORM   → compute warp from detected → canonical landmarks
+  ↓
+4. WARP + CROP           → 112×112 or 160×160 aligned face
+  ↓
+5. PIXEL NORMALIZATION   → mean subtraction / scaling
+  ↓
+Network input
+```
+
+---
+
+**A (Step 2 — Landmark Detection):**
+
+**5-point landmarks** (fast, sufficient for alignment):
+```
+• Left eye center  • Right eye center  • Nose tip
+• Left mouth corner  • Right mouth corner
+```
+
+**68-point landmarks** (dlib): 17 jaw + 10 eyebrow + 9 nose + 12 eye + 20 mouth points.
+
+For alignment, 5 points are sufficient — they define the 4 DOF a similarity transform needs.
+
+---
+
+**A (Step 3 — Geometric Transform):**
+
+**Similarity Transform** (most common):
+$$\begin{bmatrix} x' \\ y' \end{bmatrix} = s \begin{bmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{bmatrix} \begin{bmatrix} x \\ y \end{bmatrix} + \begin{bmatrix} t_x \\ t_y \end{bmatrix}$$
+
+4 parameters: scale $s$, rotation $\theta$, translation $(t_x, t_y)$.
+
+Solved via **least-squares** over 5 point correspondences:
+```
+Find M that minimizes:  Σ ‖M·[xᵢ, yᵢ, 1]ᵀ - [x'ᵢ, y'ᵢ]ᵀ‖²
+```
+
+**Canonical target coordinates (ArcFace 112×112):**
+```
+Left eye   → (38.29, 51.70)     Right eye  → (73.53, 51.70)
+Nose tip   → (56.02, 71.74)
+Left mouth → (41.55, 92.37)     Right mouth → (70.72, 92.37)
+```
+
+| Transform | DOF | Used when |
+|-----------|-----|-----------|
+| Similarity | 4 | Standard alignment (±30°) |
+| Affine | 6 | Mild distortion/shear |
+| TPS (non-rigid) | 2N | Extreme pose, expression |
+
+---
+
+**A (Step 4 — Warp + Crop):**
+
+```python
+M = cv2.estimateAffinePartial2D(src_pts, dst_pts)[0]  # similarity
+aligned = cv2.warpAffine(img, M, (112, 112))
+```
+
+`warpAffine` uses inverse warping + bilinear interpolation — no holes, sub-pixel accurate.
+
+```
+Before:                    After:
+  tilted face          →   canonical 112×112
+  👁  👁 (uneven)          👁      👁  (level, fixed coords)
+     👃 (off-center)           👃       (center)
+```
+
+---
+
+**A (Step 5 — Pixel Normalization):**
+
+```python
+# ArcFace / most modern networks:
+img = (img - 127.5) / 128.0        # [0,255] → [-1.0, +1.0]
+
+# ImageNet pretrained backbones:
+img = (img/255.0 - [0.485,0.456,0.406]) / [0.229,0.224,0.225]
+```
+
+CLAHE (Contrast Limited Adaptive HE) used for low-light / NIR face recognition.
+
+---
+
+**A (Why It Matters — Quantitatively):**
+
+| Pipeline | LFW Accuracy |
+|---------|-------------|
+| No alignment (raw crop) | ~94% |
+| Eye-center similarity align | ~99.2% |
+| 5-point similarity align | ~99.6% |
+| 68-point affine align | ~99.7% |
+
+~5% gap = network capacity wasted learning pose variation vs identity.
+
+---
+
+**A (Geometry Intuition — Factorizing Nuisance Variables):**
+
+Without alignment: network must learn $f(\text{identity} \times \text{all poses})$
+
+With alignment: normalize geometry first → network only learns $f(\text{identity})$
+
+This is the principle of **factorizing nuisance variables** from the signal of interest.
+
+---
+
+**A (Common Failure Modes):**
+
+| Failure | Cause | Effect |
+|---------|-------|--------|
+| Bad landmark detection | Occlusion, extreme pose | Wrong warp → distorted face |
+| Landmark jitter | Detection instability | Flickering embeddings in video |
+| >45° yaw | Out-of-plane rotation | 5-point alignment breaks down |
+| Missed eye landmarks | Sunglasses | Falls back to nose+mouth only |
+
+Production systems use **alignment confidence scores** — fall back to looser crop when landmark quality is low.
+
+---
+
+**Punchline for interviews:**
+> Face alignment computes a similarity transform (translate + rotate + scale) from detected landmarks to fixed canonical coordinates, then warps the face to a standard 112×112 crop so every network input has eyes, nose, and mouth at the same pixels. This removes geometric nuisance variation — LFW accuracy jumps ~5% from raw crop to 5-point aligned. The transform is solved as least-squares over 5 point correspondences; `cv2.warpAffine` with bilinear interpolation does the warp; pixels normalized to [-1, +1]. Without alignment, network capacity is wasted learning the same identity at all poses.
+
+---
+
+### Q: Embedding Normalization — L2 norm, unit hypersphere, cosine similarity = dot product. Why normalize?
+
+---
+
+**A (What the Backbone Outputs Before Normalization):**
+
+```
+f = [0.42, -1.83, 0.07, 2.31, ..., -0.94]   ← 512 values, arbitrary magnitude
+‖f‖₂ = 3.47   (varies with lighting, blur, compression, network confidence)
+```
+
+Magnitude encodes nuisance factors (image quality, lighting). Two photos of the same person point in the same **direction** but have different **lengths**.
+
+---
+
+**A (L2 Normalization):**
+
+$$\hat{f} = \frac{f}{\|f\|_2} = \frac{f}{\sqrt{\sum_{i=1}^{512} f_i^2}}$$
+
+```python
+f_hat = f / np.linalg.norm(f)          # NumPy
+f_hat = F.normalize(f, p=2, dim=1)     # PyTorch (batch)
+```
+
+After normalization: $\|\hat{f}\|_2 = 1.0$ always, for every face, regardless of image quality.
+
+---
+
+**A (The Unit Hypersphere):**
+
+All 512-dim normalized embeddings lie on the surface of **S⁵¹¹** — the unit hypersphere:
+
+```
+2D: unit circle        3D: unit sphere        512D: S⁵¹¹
+All points radius=1    All points radius=1    All face embeddings here
+```
+
+On this sphere:
+- Same person → points close together (small arc distance)
+- Different people → points far apart
+- Identity space = geography on a sphere
+
+---
+
+**A (Cosine Similarity = Dot Product):**
+
+Before normalization:
+$$\cos(\theta) = \frac{f_1 \cdot f_2}{\|f_1\|_2 \cdot \|f_2\|_2}$$
+
+After L2 normalization ($\|\hat{f}\|_2 = 1$):
+$$\hat{f}_1 \cdot \hat{f}_2 = \cos(\theta)$$
+
+The dot product **is** cosine similarity. No division needed — just a single dot product.
+
+```
+Score = 1.0   → same direction → same person
+Score = 0.0   → orthogonal    → unrelated
+Score = -1.0  → opposite      → theoretical max difference
+```
+
+Typical production thresholds: score > 0.6 → SAME PERSON, < 0.4 → DIFFERENT.
+
+---
+
+**A (Why Normalize — Decoupling Magnitude from Direction):**
+
+Without normalization, dot product mixes two signals:
+$$f_1 \cdot f_2 = \underbrace{\|f_1\|_2 \cdot \|f_2\|_2}_{\text{image quality}} \times \underbrace{\cos(\theta)}_{\text{identity}}$$
+
+Concrete failure:
+```
+Person A sharp photo:  ‖f‖ = 4.2
+Person A blurry photo: ‖f‖ = 1.1
+
+Same person (sharp vs blurry):  4.2 × 1.1 × cos(5°)  = 4.6
+Diff person (both sharp):       4.2 × 4.1 × cos(70°) = 5.9
+
+→ System says different people are MORE similar than same person!
+```
+
+After L2 norm:
+```
+Same person:  1 × 1 × cos(5°)  = 0.996  ✓
+Diff person:  1 × 1 × cos(70°) = 0.342  ✓
+```
+
+---
+
+**A (Connection to ArcFace):**
+
+ArcFace loss is defined in angular space — requires L2 normalization:
+
+$$\mathcal{L} = -\log \frac{e^{s \cdot \cos(\theta_{y_i} + m)}}{e^{s \cdot \cos(\theta_{y_i} + m)} + \sum_{j \neq y_i} e^{s \cdot \cos(\theta_j)}}$$
+
+- $s$ = scale (typically 64) — re-introduces global magnitude after normalization for softmax gradients
+- $m$ = angular margin — only geometrically meaningful if both embeddings and class weights are on the unit sphere
+- Without normalization, $\theta$ is undefined and $m$ has no meaning
+
+---
+
+**A (Summary Table):**
+
+| Without L2 Norm | With L2 Norm |
+|----------------|-------------|
+| Dot product mixes magnitude + direction | Dot product = cosine similarity (pure direction) |
+| Score depends on image quality | Score depends only on identity |
+| ArcFace angular margin undefined | Angular margin geometrically precise |
+| Requires division for every comparison | Single dot product (fast) |
+| Embeddings scattered in ℝ⁵¹² | All embeddings on S⁵¹¹ |
+
+---
+
+**Punchline for interviews:**
+> L2 normalization projects all embeddings onto the unit hypersphere, making the dot product equal to cosine similarity. This decouples magnitude (image quality, network confidence — nuisance factors) from direction (identity signal). Without it, a sharp photo of person A can score higher similarity with a sharp photo of person B than with a blurry photo of person A — breaking the system. ArcFace requires normalization because its loss is defined in angular space: the additive margin $m$ only has geometric meaning when embeddings and class weight vectors both live on the unit sphere.
 
