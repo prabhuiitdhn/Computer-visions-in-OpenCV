@@ -726,7 +726,10 @@ Face manipulation types:
 **Insight**: Low-quality faces (blur, low-res, extreme pose) should be weighted less.
 
 **MagFace**: embedding magnitude = quality proxy
-$$\mathcal{L}_{\text{mag}} = \mathcal{L}_{\text{ArcFace}}(\hat{f}) + \lambda \, g(\|f\|_2)$$
+
+$$
+\mathcal{L}_{\text{mag}} = \mathcal{L}_{\text{ArcFace}}(\hat{f}) + \lambda \, g(\lVert f \rVert_2)
+$$
 - Large ||f|| → high quality → larger margin
 - Small ||f|| → low quality → smaller margin (penalized less)
 
