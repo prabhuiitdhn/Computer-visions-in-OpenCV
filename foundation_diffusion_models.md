@@ -200,3 +200,140 @@ Sora / SD3 (2024)    → DiT at scale (3B+ params), video/multi-modal
 
 > **Key interview insight:** The shift from U-Net → DiT mirrors what happened in vision generally (CNN → ViT). The transformer's ability to scale predictably with compute is why the frontier models all use DiT now.
 
+---
+
+## Level 3: Sampling Speed — DDIM, PNDM, Consistency Models
+
+### The Core Problem
+
+DDPM requires **1000 sequential denoising steps** at inference. Each step = one full U-Net forward pass. On a GPU, that's **~30–60 seconds per image**. Completely impractical for production.
+
+The goal: same quality, far fewer steps.
+
+---
+
+### Why Can't You Just Skip Steps in DDPM?
+
+DDPM's reverse process is a **Markov chain** — each step depends on the previous:
+
+$$p_\theta(x_{t-1} \mid x_t)$$
+
+Skipping steps (e.g., $x_{1000} \to x_{500}$) breaks the Markov assumption. The noise distribution at $x_{500}$ doesn't match what the model was trained on for a 500-step jump. Quality collapses.
+
+The fix: **re-derive a non-Markovian process** that allows large jumps.
+
+---
+
+### DDIM — Denoising Diffusion Implicit Models (Song et al. 2020)
+
+**Key insight:** The DDPM training objective only depends on the marginals $q(x_t \mid x_0)$, not the joint. You can define a *different*, non-Markovian forward process with the **same marginals** but a deterministic reverse.
+
+The DDIM update rule (deterministic, $\sigma=0$):
+
+$$x_{t-1} = \sqrt{\bar{\alpha}_{t-1}} \underbrace{\left(\frac{x_t - \sqrt{1-\bar{\alpha}_t}\,\epsilon_\theta(x_t, t)}{\sqrt{\bar{\alpha}_t}}\right)}_{\text{predicted } x_0} + \sqrt{1 - \bar{\alpha}_{t-1}}\, \epsilon_\theta(x_t, t)$$
+
+Breaking this down:
+1. **Predict $x_0$** from current $x_t$ using the noise prediction
+2. **Re-noise** that predicted $x_0$ to level $t-1$
+
+This is valid for **any subsequence** of timesteps $\{t_1, t_2, \ldots, t_S\} \subset \{1, \ldots, T\}$.
+
+| | DDPM | DDIM |
+|---|---|---|
+| Steps needed | 1000 | **20–50** |
+| Stochastic? | Yes | No (deterministic) |
+| Same model weights? | — | **Yes** (no retraining) |
+| Latent consistency | No | **Yes** (same noise → same image) |
+
+DDIM also gives you a proper **latent space** — the same initial noise always produces the same image, enabling interpolation.
+
+---
+
+### PNDM — Pseudo Numerical Methods (Liu et al. 2022)
+
+DDIM treats the reverse process as a first-order ODE solver (Euler method). **PNDM** treats it as a higher-order numerical ODE problem.
+
+The diffusion reverse ODE:
+
+$$\frac{dx}{dt} = f(x, t) - \frac{g(t)^2}{2}\, \nabla_x \log p_t(x)$$
+
+Higher-order solvers (like Runge-Kutta) take **larger steps with less error**:
+
+| Solver | Order | Steps for good quality |
+|---|---|---|
+| DDIM | 1st (Euler) | 50 |
+| PNDM | 4th (pseudo linear multistep) | **20** |
+| DPM-Solver++ | 2nd–3rd | **10–15** |
+
+**PNDM key idea:** Use a linear multistep method — incorporate the gradient history from previous steps to better estimate the current step direction. No retraining needed.
+
+> This is why Stable Diffusion ships with PNDM as its default scheduler.
+
+---
+
+### Consistency Models (Song et al. 2023) — The Paradigm Shift
+
+DDIM/PNDM still need 10–50 steps. Consistency Models target **1–4 steps** — a fundamentally different approach.
+
+**Core idea:** Train a function $f_\theta(x_t, t)$ that maps **any point on the diffusion trajectory directly to $x_0$**.
+
+$$f_\theta(x_t, t) = x_0 \quad \text{for all } t$$
+
+The **consistency property**:
+
+$$f_\theta(x_t, t) = f_\theta(x_{t'}, t') \quad \text{for all } t, t' \text{ on the same trajectory}$$
+
+All noisy versions of the same image must map to the same clean image.
+
+**Two training modes:**
+
+| Mode | How | Needs pretrained diffusion model? |
+|---|---|---|
+| **Consistency Distillation (CD)** | Distill from a pretrained DDPM | Yes |
+| **Consistency Training (CT)** | Train from scratch with consistency loss | No |
+
+**Consistency loss (distillation):**
+
+$$\mathcal{L}_{CD} = \mathbb{E}\left[ d\!\left(f_\theta(x_{t_{n+1}}, t_{n+1}),\ f_{\theta^-}(x_{t_n}^{\Phi}, t_n)\right) \right]$$
+
+Where:
+- $\theta^-$ is an EMA (exponential moving average) of $\theta$ — the "target network" (stabilizes training, like in DQN)
+- $x_{t_n}^{\Phi}$ is one ODE solver step from $x_{t_{n+1}}$
+- $d(\cdot, \cdot)$ is a perceptual distance (LPIPS works better than MSE here)
+
+**Multistep refinement:** Start with 1-step, then iteratively add noise and denoise for more steps if needed:
+
+```
+1-step:  noise → f_θ → x̂₀                        (fast, less sharp)
+2-step:  noise → f_θ → add noise → f_θ → x̂₀      (better)
+4-step:  ...                                        (near-DDPM quality)
+```
+
+---
+
+### The Full Landscape of Samplers
+
+```
+Speed  ◄─────────────────────────────────────► Quality
+  │                                               │
+  │  Consistency (1-4 steps)                      │
+  │  LCM / Turbo models (1-8 steps)               │
+  │  DPM-Solver++ (10-15 steps)                   │
+  │  PNDM (20 steps)                              │
+  │  DDIM (50 steps)                              │
+  │  DDPM (1000 steps)                            │
+  │                                               │
+```
+
+**LCM (Latent Consistency Models, 2023):** Consistency distillation applied in **latent space** (like Stable Diffusion). Enables 4-step high-quality generation with SD architecture — no architecture change.
+
+---
+
+> **Key interview insight:** The sampling speed problem is essentially: **how do you solve a stochastic differential equation (SDE) or ODE with fewer function evaluations without losing accuracy?**
+>
+> - DDIM → 1st-order ODE solver
+> - PNDM/DPM-Solver++ → higher-order ODE solvers
+> - Consistency Models → learn the solution map directly, bypassing iterative solving entirely
+>
+> This framing — diffusion as a **continuous-time SDE/ODE** — is the foundation of **Score-Based Generative Models** (Topic 5), which unifies all of these methods theoretically.
+
