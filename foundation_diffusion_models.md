@@ -480,3 +480,158 @@ The same cross-attention mechanism generalises beyond text:
 
 > **Key interview insight:** CFG is not a separate classifier — it's a **score extrapolation** trick. You're moving the score estimate *further* in the direction the text pulls it, amplifying the signal. Formally it relates to the score of a sharpened distribution $p(x \mid c)^w / Z$. This is why high CFG produces oversaturated images — you're sampling from an increasingly peaked distribution.
 
+---
+
+## Level 5: Latent Diffusion — Why Stable Diffusion Works in Latent Space
+
+### The Fundamental Problem with Pixel-Space Diffusion
+
+DDPM and early diffusion models operate **directly on pixels**. For a 512×512 RGB image:
+
+$$\text{Pixel space dimension} = 512 \times 512 \times 3 = 786{,}432$$
+
+Every forward/reverse step processes ~786K values. The U-Net must run 1000 times on this full-resolution tensor. This is why DDPM is slow and memory-hungry.
+
+**Key observation (Rombach et al. 2022):** Most of that pixel-space computation is redundant. Perceptually meaningful structure — objects, textures, composition — lives in a much lower-dimensional space. High-frequency pixel details can be handled separately.
+
+---
+
+### The VAE — Compressing to Latent Space
+
+A **Variational Autoencoder (VAE)** is trained to compress images into a compact latent representation and reconstruct them back:
+
+```
+Image x ∈ ℝ^{H×W×3}
+      ↓  Encoder E
+Latent z ∈ ℝ^{h×w×c}     ← diffusion happens here
+      ↓  Decoder D
+Image x̂ ∈ ℝ^{H×W×3}
+```
+
+For Stable Diffusion v1, the compression factor is **f = 8** spatially:
+
+$$512 \times 512 \times 3 \xrightarrow{E} 64 \times 64 \times 4$$
+
+Dimensionality reduction:
+
+$$\frac{512 \times 512 \times 3}{64 \times 64 \times 4} = \frac{786{,}432}{16{,}384} = 48\times \text{ smaller}$$
+
+In practice with the full compute cost, this translates to **~64× faster** diffusion training and inference.
+
+---
+
+### VAE Training Objective
+
+The VAE is trained independently with a combination of losses:
+
+$$\mathcal{L}_{VAE} = \underbrace{\|x - D(E(x))\|^2}_{\text{reconstruction}} + \underbrace{\lambda_{KL} \cdot D_{KL}(q(z|x) \| \mathcal{N}(0,I))}_{\text{regularity}} + \underbrace{\lambda_{perc} \cdot \mathcal{L}_{LPIPS}}_{\text{perceptual}} + \underbrace{\lambda_{adv} \cdot \mathcal{L}_{GAN}}_{\text{adversarial (patch discriminator)}}$$
+
+- **Reconstruction loss** — pixel-accurate recovery
+- **KL divergence** — keeps the latent space compact and continuous (makes sampling possible)
+- **Perceptual loss (LPIPS)** — matches high-level features, not just pixels
+- **Adversarial loss** — a patch-GAN discriminator forces sharp, realistic textures
+
+The KL weight $\lambda_{KL}$ is kept very small (e.g. $10^{-6}$) in LDM — this is a near-deterministic autoencoder, almost a VQ-VAE. The latent space is nearly regular but not strongly constrained.
+
+---
+
+### What the Latent Space Looks Like
+
+The encoder $E$ maps an image to a distribution:
+
+$$q(z \mid x) = \mathcal{N}(\mu_E(x),\ \sigma_E(x)^2 \mathbf{I})$$
+
+A sample: $z = \mu_E(x) + \sigma_E(x) \odot \epsilon,\ \epsilon \sim \mathcal{N}(0, \mathbf{I})$
+
+The 4-channel latent $z \in \mathbb{R}^{64 \times 64 \times 4}$ encodes:
+- **Spatial structure** — preserved by the spatial dimensions 64×64
+- **Semantic content** — packed into the 4 channels
+- **Not directly interpretable** — but the diffusion model learns to navigate this space
+
+---
+
+### The Full LDM Architecture
+
+```
+                    ┌─────────────────────────────────┐
+                    │         LATENT SPACE             │
+                    │                                  │
+  Image x           │  z_T ~ N(0,I)                   │
+     ↓ Encoder E    │       ↓                          │
+     z_0            │  Denoising U-Net (small!)        │
+                    │  + Cross-Attention(c)  ← CLIP    │
+                    │       ↓                          │
+                    │  z_0 (predicted)                 │
+                    └─────────────────────────────────┘
+                              ↓ Decoder D
+                          Image x̂
+```
+
+The U-Net now operates on $64 \times 64 \times 4$ instead of $512 \times 512 \times 3$. This is why the SD U-Net is **orders of magnitude smaller** than a pixel-space model of comparable output quality.
+
+---
+
+### Two-Stage Training (Critical Interview Point)
+
+LDM training is **decoupled** into two completely separate stages:
+
+**Stage 1 — Train the VAE** (once, reused forever):
+- Learn $E$ and $D$ on large image datasets
+- Goal: near-perfect reconstruction with a compact, regular latent space
+
+**Stage 2 — Train the Diffusion Model in Latent Space**:
+- Freeze $E$ and $D$ entirely
+- Run the full DDPM/DDIM forward/reverse process on $z = E(x)$
+- Train U-Net to predict $\epsilon$ in latent space
+
+$$\mathcal{L}_{LDM} = \mathbb{E}_{z \sim E(x),\, \epsilon,\, t} \left[ \lVert \epsilon - \epsilon_\theta(z_t, t, \mathbf{c}) \rVert^2 \right]$$
+
+The VAE **never sees noise** — it only processes clean images. The diffusion model **never sees pixels** — it only processes latents.
+
+---
+
+### Why This Works: The Perceptual Compression Hypothesis
+
+Rombach et al. empirically showed that generative model learning has two phases:
+
+```
+Training compute →
+
+Phase 1 (early): Model learns perceptual compression
+                 (what is a face, what is a tree)
+
+Phase 2 (late):  Model learns fine-grained detail
+                 (exact pixel values, textures)
+```
+
+By offloading Phase 1 to the VAE, the diffusion model can **skip straight to learning semantics**. This is why LDM trains faster and generalizes better per FLOP.
+
+---
+
+### Stable Diffusion Versions: Latent Space Evolution
+
+| Model | Latent dim | Channels | VAE type | Notes |
+|---|---|---|---|---|
+| SD v1.x | 64×64 | 4 | KL-VAE | Original LDM |
+| SD v2.x | 64×64 | 4 | KL-VAE (improved) | Better text encoder (OpenCLIP) |
+| SDXL | 128×128 | 4 | KL-VAE | Higher res latents, 2-stage U-Net |
+| SD3 / Flux | 128×128 | 16 | Improved VAE | DiT backbone, more channels |
+
+SDXL doubled the latent resolution (128×128) for sharper outputs while still being far cheaper than 1024×1024 pixel-space diffusion.
+
+---
+
+### The VAE Bottleneck Problem
+
+A known limitation: the VAE is the **quality ceiling**. Any detail the encoder discards is unrecoverable by the diffusion model. Common artifacts:
+
+- **Text rendering failure** — SD v1/v2 cannot generate legible text because CLIP+VAE can't preserve character-level detail at 8× compression
+- **Fine detail loss** — hair, fingers, small objects get blurred at high compression
+- **Color shifting** — the 4-channel latent sometimes produces hue drift
+
+SD3 / Flux address this by using **16-channel latents** and an improved VAE with lower perceptual loss — more capacity per spatial location.
+
+---
+
+> **Key interview insight:** Latent Diffusion is essentially a **separation of concerns**: the VAE handles perceptual compression (a solved problem), and the diffusion model handles generative modeling (the hard problem). This decomposition is what made high-resolution diffusion models practical. The 64× speedup is not magic — it's the direct consequence of reducing the dimensionality of the space the diffusion process operates in from ~786K to ~16K.
+
