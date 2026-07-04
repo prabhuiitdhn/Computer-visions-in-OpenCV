@@ -635,3 +635,397 @@ SD3 / Flux address this by using **16-channel latents** and an improved VAE with
 
 > **Key interview insight:** Latent Diffusion is essentially a **separation of concerns**: the VAE handles perceptual compression (a solved problem), and the diffusion model handles generative modeling (the hard problem). This decomposition is what made high-resolution diffusion models practical. The 64× speedup is not magic — it's the direct consequence of reducing the dimensionality of the space the diffusion process operates in from ~786K to ~16K.
 
+---
+
+## Level 6: Score Matching — The Theoretical SDE/ODE Framework
+
+### What is a Score Function?
+
+The **score function** of a probability distribution $p(x)$ is the gradient of its log-density with respect to $x$:
+
+$$s(x) = \nabla_x \log p(x)$$
+
+Intuition: it's a **vector field** that points toward regions of higher probability — toward the data manifold.
+
+```
+Low density region          High density region
+     ·  →  →  →  →  →  ●●●●●
+     ·  →  →  →  →  →  ●●●●●
+     ·  →  →  →  →  →  ●●●●●
+     ← score vectors point toward the data
+```
+
+If you know the score everywhere, you can **navigate toward samples** from $p(x)$ using **Langevin dynamics**:
+
+$$x_{i+1} = x_i + \frac{\eta}{2} \nabla_x \log p(x_i) + \sqrt{\eta}\, \epsilon_i, \quad \epsilon_i \sim \mathcal{N}(0, \mathbf{I})$$
+
+This is stochastic gradient ascent on the log-density — it converges to samples from $p(x)$.
+
+---
+
+### The Problem: We Don't Know $p(x)$
+
+Real data distributions (natural images) are unknown. We only have samples. **Score matching** (Hyvärinen 2005) trains a neural network $s_\theta(x) \approx \nabla_x \log p(x)$ without ever knowing $p(x)$ explicitly.
+
+**Denoising Score Matching (Vincent 2011):** Rather than matching the score of $p(x)$ directly (which requires computing a partition function), match the score of a **noised** distribution:
+
+$$\mathcal{L}_{DSM} = \mathbb{E}_{x \sim p(x),\, \tilde{x} \sim q(\tilde{x}|x)} \left[ \lVert s_\theta(\tilde{x}) - \nabla_{\tilde{x}} \log q(\tilde{x} \mid x) \rVert^2 \right]$$
+
+For Gaussian noise $q(\tilde{x} \mid x) = \mathcal{N}(\tilde{x};\ x, \sigma^2 \mathbf{I})$:
+
+$$\nabla_{\tilde{x}} \log q(\tilde{x} \mid x) = -\frac{\tilde{x} - x}{\sigma^2} = \frac{\epsilon}{\sigma}$$
+
+So the target score is just the **normalized noise direction**. And this is *exactly* what DDPM's $\epsilon_\theta$ predicts — the connection is direct:
+
+$$s_\theta(x_t, t) = -\frac{\epsilon_\theta(x_t, t)}{\sqrt{1 - \bar{\alpha}_t}}$$
+
+**DDPM is denoising score matching.** The noise prediction network $\epsilon_\theta$ is a score network in disguise.
+
+---
+
+### The SDE Framework (Song et al. 2021)
+
+Yang Song's landmark paper unified all diffusion models under a single continuous-time SDE framework.
+
+**Forward SDE** — gradually corrupts data to noise:
+
+$$dx = f(x, t)\, dt + g(t)\, dW$$
+
+Where:
+- $f(x, t)$ — drift coefficient (deterministic part)
+- $g(t)$ — diffusion coefficient (noise scale)
+- $dW$ — Wiener process (Brownian motion increment)
+
+**Reverse SDE** — goes from noise back to data (Anderson 1982):
+
+$$dx = \left[f(x, t) - g(t)^2 \nabla_x \log p_t(x)\right] dt + g(t)\, d\bar{W}$$
+
+The reverse SDE requires the **score** $\nabla_x \log p_t(x)$ at every noise level $t$. Train a neural network $s_\theta(x, t)$ to estimate this — then you can run the reverse SDE to generate samples.
+
+---
+
+### DDPM and SMLD as Special Cases
+
+| Method | SDE type | $f(x,t)$ | $g(t)$ |
+|---|---|---|---|
+| **DDPM** | VP-SDE (Variance Preserving) | $-\frac{1}{2}\beta(t) x$ | $\sqrt{\beta(t)}$ |
+| **SMLD / NCSN** | VE-SDE (Variance Exploding) | $0$ | $\sqrt{\frac{d[\sigma^2(t)]}{dt}}$ |
+| **Sub-VP SDE** | Between VP and VE | modified | modified |
+
+**VP-SDE** (DDPM continuous limit): The noise schedule $\beta_t$ becomes a continuous function $\beta(t)$. As $T \to \infty$, DDPM's discrete Markov chain converges to this SDE. All the math stays the same.
+
+**VE-SDE** (NCSN/Score Matching): The signal variance stays fixed, noise variance explodes. Easier to train but numerically less stable.
+
+---
+
+### The Probability Flow ODE — The Key to Fast Sampling
+
+For every SDE, there exists a corresponding **deterministic ODE** with the same marginal distributions $p_t(x)$:
+
+$$\frac{dx}{dt} = f(x, t) - \frac{1}{2} g(t)^2 \nabla_x \log p_t(x)$$
+
+This is the **Probability Flow ODE**. It has no stochastic term but traces identical trajectories in distribution.
+
+**Why this matters:**
+1. ODEs can be solved with high-order numerical methods (fewer steps)
+2. The mapping $x_T \leftrightarrow x_0$ is **deterministic** and **invertible**
+3. This is exactly what DDIM is — a first-order solver of the probability flow ODE
+
+$$\underbrace{\text{DDIM}}_{\text{1st order}} \subset \underbrace{\text{PNDM, DPM-Solver}}_{\text{higher order}} \subset \underbrace{\text{Probability Flow ODE solvers}}_{\text{general framework}}$$
+
+---
+
+### Three Equivalent Parameterizations of the Score Network
+
+Given the score-noise relationship, you can train the network to predict three equivalent things:
+
+| Prediction target | Symbol | Conversion to score |
+|---|---|---|
+| **Noise** (DDPM default) | $\epsilon_\theta$ | $s_\theta = -\epsilon_\theta / \sqrt{1-\bar\alpha_t}$ |
+| **Score directly** | $s_\theta$ | $s_\theta$ |
+| **Clean image** ($x_0$) | $x_\theta$ | $s_\theta = -(x_t - \sqrt{\bar\alpha_t}\, x_\theta) / (1-\bar\alpha_t)$ |
+| **Velocity** (flow matching) | $v_\theta$ | $s_\theta = -(v_\theta + \sqrt{\bar\alpha_t}\,\epsilon) / \sqrt{1-\bar\alpha_t}$ |
+
+These are all mathematically equivalent. The **velocity parameterization** is used in modern models (Stable Diffusion 3, Flux) because it has better conditioning near $t=0$ and $t=T$.
+
+---
+
+### Flow Matching — The Latest Generalization (Lipman et al. 2022)
+
+Flow Matching replaces the SDE/score framework with **Continuous Normalizing Flows (CNFs)**:
+
+Instead of learning a score, learn a **velocity field** $v_\theta(x, t)$ that defines the ODE:
+
+$$\frac{dx}{dt} = v_\theta(x, t)$$
+
+With a simple **linear interpolation** path between data $x_0$ and noise $x_1 \sim \mathcal{N}(0,I)$:
+
+$$x_t = (1-t)\, x_0 + t\, x_1, \qquad t \in [0, 1]$$
+
+The target velocity is just:
+
+$$v^*(x_t, t) = x_1 - x_0$$
+
+**Training loss:**
+
+$$\mathcal{L}_{FM} = \mathbb{E}_{t,\, x_0,\, x_1} \left[ \lVert v_\theta(x_t, t) - (x_1 - x_0) \rVert^2 \right]$$
+
+This is **simpler than DDPM** — straight-line paths from noise to data, no complex noise schedules.
+
+**Why Flow Matching wins:**
+
+```
+DDPM path:  curved, complex, requires 1000 steps
+Flow Match: straight line, fewer steps, better quality
+
+x_1 (noise)
+    ●
+     \  ← DDPM curved path
+      \  ___
+       \/   \
+       /\    ● x_0 (data)
+      /  \__/
+     ● ← Flow Matching straight path
+```
+
+SD3 and Flux use **Rectified Flow** (a variant) — this is why they achieve better quality at fewer steps than older SD versions.
+
+---
+
+### The Full Theoretical Lineage
+
+```
+Score Matching (Hyvärinen 2005)
+    ↓
+Denoising Score Matching (Vincent 2011)
+    ↓
+NCSN — Noise Conditional Score Networks (Song & Ermon 2019)
+    ↓
+DDPM (Ho et al. 2020) ←——→ NCSN++ (Song et al. 2020)
+    ↓
+Score SDE Framework — unifies everything (Song et al. 2021)
+    ↓                         ↓
+  VP-SDE (DDPM)            VE-SDE (NCSN)
+    ↓
+Probability Flow ODE → DDIM, DPM-Solver, PNDM
+    ↓
+Flow Matching / Rectified Flow (2022–2023) → SD3, Flux
+```
+
+---
+
+> **Key interview insight:** The SDE framework reveals that **the score function is the only thing that matters**. Every diffusion model — regardless of architecture, noise schedule, or sampler — is fundamentally estimating $\nabla_x \log p_t(x)$. The forward process defines what distributions to estimate the score of, and the reverse process/ODE solver defines how to use those estimates to generate samples. Flow Matching simplifies the path geometry, making the score easier to estimate and the ODE faster to solve.
+
+---
+
+## Level 7: Vision Applications — Inpainting, Super-Resolution, Medical Imaging, Depth Estimation, Video Generation
+
+### Overview
+
+Each application exploits a different property of the generative process.
+
+---
+
+### 1. Inpainting — Filling Missing Regions
+
+**Problem:** Given an image $x$ with a binary mask $m$ (1 = known, 0 = missing), generate a plausible completion that is coherent with the known region.
+
+**Naive approach — RePaint (Ho et al. 2022):**
+
+At each reverse step, force the known region to stay consistent with the original image:
+
+$$x_{t-1}^{\text{known}} = \sqrt{\bar{\alpha}_{t-1}}\, x_0 + \sqrt{1-\bar{\alpha}_{t-1}}\, \epsilon$$
+$$x_{t-1}^{\text{unknown}} = \text{reverse\_step}(x_t, t)$$
+$$x_{t-1} = m \odot x_{t-1}^{\text{known}} + (1 - m) \odot x_{t-1}^{\text{unknown}}$$
+
+**Problem with naive approach:** The known and unknown regions are denoised independently — they become inconsistent at boundaries (seam artifacts).
+
+**RePaint fix:** After each reverse step, re-noise and re-denoise multiple times (`resample_steps`) at the boundary — forces the network to harmonize the regions before moving to the next timestep.
+
+```
+For each timestep t:
+  Repeat r times:
+    1. Merge known (noised) + unknown (denoised)
+    2. Re-noise slightly → x_{t+1}
+    3. Denoise again → x_t
+  Move to t-1
+```
+
+**Production approach — Stable Diffusion Inpainting:**
+Fine-tune the U-Net with an extra 5-channel input: 4 latent channels + 1 mask channel. The model is explicitly trained on masked data and learns to attend to the mask — no post-hoc resampling needed, much faster.
+
+$$\epsilon_\theta(z_t, t, \mathbf{c}, z_{\text{masked}}, m)$$
+
+**Applications:** Photo editing (remove objects), medical image restoration, video frame reconstruction, satellite image gap filling.
+
+---
+
+### 2. Super-Resolution — Hallucinating Detail
+
+**Problem:** Given a low-resolution image $x_{LR}$, generate a high-resolution version $x_{HR}$ with plausible high-frequency detail.
+
+This is **ill-posed** — many HR images can correspond to one LR image. Diffusion models embrace this by sampling from $p(x_{HR} \mid x_{LR})$ — producing diverse, plausible reconstructions.
+
+**SR3 (Saharia et al. 2021):** Condition the reverse diffusion on $x_{LR}$:
+
+$$\epsilon_\theta(x_t, t, x_{LR}^{\uparrow})$$
+
+Where $x_{LR}^{\uparrow}$ is the bicubic-upsampled LR image, concatenated channel-wise to $x_t$ as input. The model learns to add realistic high-frequency detail consistent with the LR structure.
+
+**Cascaded Diffusion Models (Ho et al. 2022):**
+
+```
+z ~ N(0,I)
+  → Diffusion Model 1 → 64×64 image
+  → Diffusion Model 2 (conditioned on 64×64) → 256×256
+  → Diffusion Model 3 (conditioned on 256×256) → 1024×1024
+```
+
+Each stage is a separate diffusion model trained to upsample. This is the architecture behind **DALL·E 2** and **Imagen**.
+
+**Why diffusion beats GAN-SR:**
+- GANs (ESRGAN, Real-ESRGAN) produce sharp but often hallucinated textures that look unnatural under scrutiny
+- Diffusion SR maintains semantic consistency because the reverse process is guided by the LR condition at every step
+- Perceptual metrics (FID, LPIPS) favor diffusion; PSNR/SSIM may favor regression models (they optimize MSE, which blurs)
+
+**Applications:** Medical imaging (MRI, CT upscaling), satellite imagery, surveillance, film restoration.
+
+---
+
+### 3. Medical Imaging — Where Diffusion Excels
+
+Medical imaging has unique requirements: **trustworthy uncertainty**, **data scarcity**, **privacy constraints**. Diffusion models address all three.
+
+#### 3a. Anomaly Detection
+
+Train a diffusion model on **only healthy images**. At inference:
+
+1. Corrupt a test image to timestep $t^*$ (partial noising)
+2. Reconstruct via reverse diffusion
+3. Compute pixel-wise difference: $\delta = |x_0 - x_{\text{reconstructed}}|$
+
+Healthy regions reconstruct accurately ($\delta \approx 0$). Anomalous regions (tumors, lesions) are "corrected" toward the healthy manifold ($\delta > 0$) — the difference map is the anomaly score.
+
+$$\text{Anomaly map} = \| x_0 - \hat{x}_0^{(t^*)} \|$$
+
+The choice of $t^*$ controls sensitivity: small $t^*$ catches fine anomalies, large $t^*$ catches structural ones.
+
+#### 3b. Synthetic Data Generation (Privacy-Preserving)
+
+Train on real patient scans → generate synthetic scans → share synthetic dataset publicly without privacy risk. Used for:
+- Training downstream models without data sharing agreements
+- Augmenting rare disease datasets (few-shot learning)
+- Class balancing (generate more of underrepresented pathologies)
+
+#### 3c. Image-to-Image Translation
+
+MRI → CT synthesis, T1 → T2 translation, PET → MRI synthesis. Avoids costly multi-modal acquisition. Conditioned diffusion (via cross-attention or concatenation) learns the mapping between modalities.
+
+#### 3d. Reconstruction from Undersampled Measurements
+
+In MRI, acquiring fewer k-space measurements = faster scans but aliased images. Diffusion models reconstruct from highly undersampled k-space by imposing data consistency at each reverse step:
+
+$$\hat{x}_{t-1} = \text{reverse\_step}(x_t) \quad \text{then project onto} \quad \{x : \mathcal{A}(x) = y\}$$
+
+Where $\mathcal{A}$ is the MRI forward operator and $y$ are the measurements. This enables **4–8× faster MRI scans** with diagnostic-quality reconstructions.
+
+---
+
+### 4. Depth Estimation — Marigold
+
+**Problem:** Monocular depth estimation is ill-posed. Classical methods (MiDaS, DPT) produce deterministic outputs. Diffusion enables **probabilistic** depth estimation.
+
+**Marigold (Ke et al. 2024):** Fine-tune Stable Diffusion for depth estimation by treating the depth map as the "image" to generate, conditioned on the RGB input:
+
+```
+RGB image x  →  VAE encoder  →  condition c
+z_T ~ N(0,I)  →  Denoising U-Net(z_t, t, c)  →  z_0  →  VAE Decoder  →  Depth map
+```
+
+**Key insight:** Stable Diffusion's U-Net has learned extremely rich visual priors from internet-scale data. Fine-tuning it for depth requires **very little data** (synthetic renders) because the visual understanding is already there — you're just redirecting the output.
+
+**Advantages over discriminative methods:**
+- Uncertainty estimation: run multiple samples, variance = confidence
+- Works zero-shot on novel domains (medical, satellite, microscopy)
+- Affine-invariant depth (relative, not metric) — robust to scale ambiguity
+
+**GeoWizard, StableNormal:** Same paradigm applied to surface normals and geometry estimation.
+
+---
+
+### 5. Video Generation — Temporal Diffusion
+
+Extending image diffusion to video requires handling **temporal consistency** — frames must be coherent across time.
+
+#### 5a. Architecture Approaches
+
+**Inflate 2D → 3D (Make-A-Video, Imagen Video):**
+
+Take a pretrained image U-Net and add **temporal attention** layers:
+
+```
+Spatial Self-Attention (per frame, pretrained, frozen)
+       +
+Temporal Self-Attention (across frames, newly added, trained)
+```
+
+Temporal attention treats the frame sequence as a 1D sequence of tokens, attending across time. Spatial layers handle per-frame quality; temporal layers handle consistency.
+
+#### 5b. DiT for Video — Sora's Architecture
+
+**Sora (OpenAI 2024)** uses a **Video DiT**:
+
+1. Encode video frames with a VAE → latent sequence $z \in \mathbb{R}^{T \times h \times w \times c}$
+2. Patchify spatially AND temporally → sequence of 3D tokens
+3. Apply full transformer with 3D attention (space + time jointly)
+4. Condition on text via cross-attention
+
+The key innovation: **variable-length, variable-resolution** training. The same model handles 1s clips and 60s clips, 480p and 1080p, by treating them all as sequences of different lengths.
+
+#### 5c. Temporal Consistency Strategies
+
+| Strategy | Method | Used in |
+|---|---|---|
+| Temporal attention | Attend across frame tokens | Make-A-Video, Sora |
+| Optical flow warping | Warp previous frame as condition | FILM, some SR models |
+| Noise sharing | Correlate noise across frames | AnimateDiff |
+| Autoregressive | Generate frames sequentially | Some early video models |
+
+**AnimateDiff:** Inserts a **motion module** (temporal attention) into SD U-Net. Fine-tune only the motion module on video data. Existing SD LoRAs/checkpoints work unchanged — plug-and-play video for any SD model.
+
+#### 5d. Video Editing — TokenFlow
+
+**TokenFlow (2023):** Edit a video by propagating edits through DDIM inversion. Key insight: real video has consistent self-attention patterns across frames. Enforce that edited frames share the same attention keys/values → temporal consistency without per-frame degradation.
+
+---
+
+### 6. The Unified Framework — Any Vision Task as Conditional Generation
+
+| Task | Condition $c$ | Output |
+|---|---|---|
+| Image segmentation | RGB image | Segmentation mask |
+| Optical flow | Frame pair | Flow field |
+| Pose estimation | RGB image | Keypoint heatmaps |
+| Image colorization | Grayscale image | Color image |
+| Shadow removal | Image with shadow | Shadow-free image |
+| Deblurring | Blurry image | Sharp image |
+| HDR reconstruction | LDR image | HDR image |
+
+**Palette (2022):** A single diffusion model trained on all image-to-image translation tasks simultaneously — demonstrates that diffusion models are **general-purpose vision operators**.
+
+---
+
+### Practical Considerations Summary
+
+| Application | Key challenge | Diffusion solution |
+|---|---|---|
+| Inpainting | Boundary coherence | RePaint resampling / masked fine-tuning |
+| Super-resolution | Hallucination fidelity | LR concatenation conditioning |
+| Medical | Uncertainty quantification | Ensemble of samples |
+| Depth | Scale ambiguity | Affine-invariant output + fine-tuned priors |
+| Video | Temporal consistency | Temporal attention / 3D DiT |
+
+---
+
+> **Key interview insight:** Diffusion models dominate vision tasks not because they were designed for each task, but because they are **universal conditional density estimators**. Any task of the form "given observation $y$, generate plausible $x$ consistent with $y$" can be framed as conditional diffusion. The score function $\nabla_x \log p(x \mid y)$ decomposes as $\nabla_x \log p(x) + \nabla_x \log p(y \mid x)$ — an unconditional prior plus a likelihood term. This Bayesian decomposition is why pre-trained diffusion models generalize so well to downstream vision tasks with minimal fine-tuning.
+
