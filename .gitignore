@@ -1,0 +1,6 @@
+# Datasets and local training artifacts
+foundation_CNN/data/
+
+# Python cache artifacts
+__pycache__/
+*.py[cod]
