@@ -122,6 +122,15 @@ Convolution is a linear operation in spatial domain, equivalent to multiplicatio
 
 Convolutional Neural Networks (CNNs) learn kernels via backpropagation, automatically discovering optimal feature detectors rather than hand-crafting them.
 
+**Where kernel values come from (learned vs. hand-crafted):**
+- Kernel values are model parameters (weights), not fixed math constants.
+- At initialization: values are random (e.g., He/Xavier init), not meaningful yet.
+- During training: backpropagation computes $\frac{\partial L}{\partial W}$ for each kernel weight, and the optimizer updates $W \leftarrow W - \eta \frac{\partial L}{\partial W}$.
+- What you fix by design: number of kernels, kernel size, stride, padding, depth.
+- What is learned automatically: the actual numbers inside each kernel.
+- This is different from classical CV, where kernels like Sobel, Gaussian, Laplacian are hand-crafted (fixed, not learned) mathematical operators.
+- In modern CNNs, kernels are almost always learned; predefined kernels are only used optionally as initialization or fixed layers.
+
 **Trade-offs:**
 - Simple but assumes linear relationships.
 - Boundary handling (padding) affects edge behavior.
