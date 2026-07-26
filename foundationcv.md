@@ -42,40 +42,40 @@ where $I$ is an $H \times W$ image, $K$ is a $k_h \times k_w$ kernel, $p_h = \lf
 4. **Interpretability:** Different kernels detect different patterns (edges, corners, textures).
 
 **Common kernels:**
-- **Sobel:** detects edges (horizontal or vertical).
+**Sobel:** detects edges (horizontal or vertical).
 
-   $$
-   S_x = \begin{bmatrix}
-   -1 & 0 & 1 \\
-   -2 & 0 & 2 \\
-   -1 & 0 & 1
-   \end{bmatrix}, \quad
-   S_y = \begin{bmatrix}
-   -1 & -2 & -1 \\
-   0 & 0 & 0 \\
-   1 & 2 & 1
-   \end{bmatrix}
-   $$
+$$
+S_x = \begin{bmatrix}
+-1 & 0 & 1 \\
+-2 & 0 & 2 \\
+-1 & 0 & 1
+\end{bmatrix}, \quad
+S_y = \begin{bmatrix}
+-1 & -2 & -1 \\
+0 & 0 & 0 \\
+1 & 2 & 1
+\end{bmatrix}
+$$
 
-- **Gaussian:** smoothing and blur (common 3x3, normalized).
+**Gaussian:** smoothing and blur (common 3x3, normalized).
 
-   $$
-   G = \frac{1}{16}\begin{bmatrix}
-   1 & 2 & 1 \\
-   2 & 4 & 2 \\
-   1 & 2 & 1
-   \end{bmatrix}
-   $$
+$$
+G = \frac{1}{16}\begin{bmatrix}
+1 & 2 & 1 \\
+2 & 4 & 2 \\
+1 & 2 & 1
+\end{bmatrix}
+$$
 
-- **Laplacian:** second derivative, edge enhancement.
+**Laplacian:** second derivative, edge enhancement.
 
-   $$
-   L = \begin{bmatrix}
-   0 & -1 & 0 \\
-   -1 & 4 & -1 \\
-   0 & -1 & 0
-   \end{bmatrix}
-   $$
+$$
+L = \begin{bmatrix}
+0 & -1 & 0 \\
+-1 & 4 & -1 \\
+0 & -1 & 0
+\end{bmatrix}
+$$
 
 **Expert perspective:**
 Convolution is a linear operation in spatial domain, equivalent to multiplication in frequency domain (Fourier domain). This duality is powerful:
