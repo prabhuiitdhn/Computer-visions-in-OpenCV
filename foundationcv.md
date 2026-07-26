@@ -65,7 +65,7 @@ Sobel operator finds edges by measuring intensity change in two directions:
 1. Convolve image with $S_x$ to get horizontal gradient ($G_x$).
 2. Convolve image with $S_y$ to get vertical gradient ($G_y$).
 3. Combine them for edge strength: $G = \sqrt{G_x^2 + G_y^2}$ (or $|G_x| + |G_y|$).
-4. Edge direction: $\theta = \operatorname{atan2}(G_y, G_x)$.
+4. Edge direction: $\theta = \mathrm{atan2}(G_y, G_x)$.
 
 High gradient means a strong edge. It is basically a smoothed first-derivative edge detector.
 
@@ -2441,7 +2441,7 @@ $S_x$ detects vertical edges (horizontal gradient); $S_y$ detects horizontal edg
 **Gradient magnitude and direction:**
 
 $$
-G = \sqrt{S_x^2 + S_y^2}, \quad \theta = \operatorname{atan2}(S_y, S_x)
+G = \sqrt{S_x^2 + S_y^2}, \quad \theta = \mathrm{atan2}(S_y, S_x)
 $$
 
 **Why Sobel works:**
