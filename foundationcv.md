@@ -167,6 +167,55 @@ where $I$ = input size, $K$ = kernel size, $P$ = padding, $S$ = stride.
 2. **Same padding:** output size equals input size. Requires padding = (kernel_size - 1) / 2.
 3. **Full padding:** output expands. Useful in deconvolution.
 
+**Full padding explained:**
+
+Full padding means padding the image enough so the kernel can slide starting from a position where it only touches the corner of the image (mostly padding, one real pixel overlap), all the way until it exits the other corner similarly. This is the opposite of "valid" (no padding).
+
+Padding size formula (for a $K \times K$ kernel, stride $S=1$, padding applied on each side):
+
+$$
+P = K - 1
+$$
+
+Why $P = K-1$: using the output-size formula, for full padding we want the kernel to slide over every possible overlap position, so output becomes:
+
+$$
+O = I + K - 1
+$$
+
+Setting this equal to $O = \left\lfloor \frac{(I - K) + (2 \times P)}{S} \right\rfloor + 1$ (with $S=1$) and solving for $P$ gives $P = K - 1$.
+
+Example: image $5\times5$, kernel $3\times3$, so $P = 3-1 = 2$ (pad 2 zeros each side).
+
+```
+Original 5x5:            Padded 9x9 (pad=2 each side):
+X X X X X                0 0 0 0 0 0 0 0 0
+X X X X X                0 0 0 0 0 0 0 0 0
+X X X X X       ->       0 0 X X X X X 0 0
+X X X X X                0 0 X X X X X 0 0
+X X X X X                0 0 X X X X X 0 0
+                          0 0 X X X X X 0 0
+                          0 0 X X X X X 0 0
+                          0 0 0 0 0 0 0 0 0
+                          0 0 0 0 0 0 0 0 0
+```
+
+Sliding a $3\times3$ kernel over the $9\times9$ padded image with stride 1:
+
+$$
+O = \left\lfloor \frac{(9-3)+0}{1}\right\rfloor + 1 = 7 = I + K - 1 = 5+3-1
+$$
+
+Key idea: at the very first kernel position, only 1 pixel of the kernel overlaps the real image (rest is padding/zeros); it slides until only 1 pixel overlaps at the opposite corner. This maximizes output size, useful in deconvolution/transposed convolution where you want to "expand" spatial size.
+
+Comparison of padding types (stride=1):
+
+| Padding type | P | Output size O |
+|---|---|---|
+| Valid (no padding) | 0 | I - K + 1 (shrinks) |
+| Same | (K-1)/2 | I (unchanged) |
+| Full | K - 1 | I + K - 1 (expands) |
+
 **Effect on border regions:**
 - No padding: edge pixels have fewer neighbors, possibly leading to edge bias.
 - Zero padding: artificially introduces zero values, can affect edge detection.
