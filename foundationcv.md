@@ -44,6 +44,9 @@ where $I$ is an $H \times W$ image, $K$ is a $k_h \times k_w$ kernel, $p_h = \lf
 **Common kernels:**
 **Sobel:** detects edges (horizontal or vertical).
 
+Quick intuition: apply $S_x$ for left-right intensity change and $S_y$ for top-bottom change; combine them to get edge strength.
+
+
 $$
 S_x = \begin{bmatrix}
 -1 & 0 & 1 \\
@@ -56,6 +59,15 @@ S_y = \begin{bmatrix}
 1 & 2 & 1
 \end{bmatrix}
 $$
+
+Sobel operator finds edges by measuring intensity change in two directions:
+
+1. Convolve image with $S_x$ to get horizontal gradient ($G_x$).
+2. Convolve image with $S_y$ to get vertical gradient ($G_y$).
+3. Combine them for edge strength: $G = \sqrt{G_x^2 + G_y^2}$ (or $|G_x| + |G_y|$).
+4. Edge direction: $\theta = \operatorname{atan2}(G_y, G_x)$.
+
+High gradient means a strong edge. It is basically a smoothed first-derivative edge detector.
 
 **Gaussian:** smoothing and blur (common 3x3, normalized).
 
