@@ -268,7 +268,9 @@ $$
 K_{\text{eff}} = K + (K-1)(d-1)
 $$
 
-where $d$ = dilation rate ($d=1$ is normal convolution).
+where $d$ = dilation rate 
+($d=1$ is normal convolution).
+($d=2$ is dilated convolution).
 
 Visualization (3x3 kernel, dilation=2):
 
@@ -303,7 +305,7 @@ Visualization (input 2x2, kernel 2x2, stride 1, no padding):
 
 ```
 Input (2x2):        Kernel (2x2):        Output (3x3):
-1 2                  a b                  1a      1b+2a      2b
+1 2                  a b                  1a      1b+2a        2b
 3 4                  c d           ->     1c+3a   1d+2c+3b+4a  2d+4b
                                           3c      3d+4c        4d
 ```
@@ -318,7 +320,7 @@ $$
 
 where $I$ = input size, $K$ = kernel size, $S$ = stride, $P$ = padding.
 
-(Some frameworks add an `output_padding` term for stride > 1 cases to resolve ambiguity: $O = (I-1) \times S - 2P + K + \text{output\_padding}$.)
+(Some frameworks add an `output_padding` term for stride > 1 cases to resolve ambiguity: $O = (I-1) \times S - 2P + K + \text{output-padding}$.)
 
 Key properties:
 1. Learnable upsampling, kernel weights are trained, unlike fixed interpolation (bilinear/nearest).
