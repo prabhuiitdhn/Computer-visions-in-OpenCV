@@ -149,10 +149,18 @@ Convolutional Neural Networks (CNNs) learn kernels via backpropagation, automati
 **Output size formula:**
 
 $$
-O = \left\lfloor \frac{I - K + 2P}{S} \right\rfloor + 1
+O = \left\lfloor \frac{\big( (I - K) + (2 \times P) \big)}{S} \right\rfloor + 1
 $$
 
 where $I$ = input size, $K$ = kernel size, $P$ = padding, $S$ = stride.
+
+**BODMAS order (step-by-step):**
+1. Brackets first: compute $(I - K)$.
+2. Then $(2 \times P)$.
+3. Add the two results: $(I - K) + (2 \times P)$.
+4. Divide by $S$.
+5. Take floor $\lfloor \cdot \rfloor$ (round down).
+6. Add $1$ at the end.
 
 **Common padding types:**
 1. **Valid (no padding):** output shrinks. For 32×32 image and 3×3 kernel with stride=1: output is 30×30.
