@@ -194,10 +194,10 @@ X X X X X                0 0 0 0 0 0 0 0 0
 X X X X X       ->       0 0 X X X X X 0 0
 X X X X X                0 0 X X X X X 0 0
 X X X X X                0 0 X X X X X 0 0
-                          0 0 X X X X X 0 0
-                          0 0 X X X X X 0 0
-                          0 0 0 0 0 0 0 0 0
-                          0 0 0 0 0 0 0 0 0
+                         0 0 X X X X X 0 0
+                         0 0 X X X X X 0 0
+                         0 0 0 0 0 0 0 0 0
+                         0 0 0 0 0 0 0 0 0
 ```
 
 Sliding a $3\times3$ kernel over the $9\times9$ padded image with stride 1:
@@ -260,6 +260,71 @@ Pooling is lossy compression. The information discarded is typically high-freque
 
 **Information-theoretic view:**
 Pooling is a form of dimensionality reduction. In max pooling, we retain the maximum activation, sacrificing all sub-maximum activations. This is justified by the assumption that small spatial shifts should not change the output (invariance), but this assumption fails for tasks requiring precise localization.
+
+---
+
+### Q3.1. What are the other types of pooling used for better feature extraction?
+
+**A:** Beyond standard max/average pooling, several other pooling variants are used for better or more specialized feature extraction.
+
+**1. Global Average Pooling (GAP):**
+- Averages entire feature map to a single value per channel.
+- Used to replace fully connected layers before classification (e.g., ResNet, Inception).
+- Reduces overfitting, fewer parameters, provides spatial-invariance summary per channel.
+
+**2. Global Max Pooling (GMP):**
+- Takes single max value per channel across entire feature map.
+- Useful when only the strongest activation matters (e.g., presence detection).
+
+**3. Stochastic Pooling:**
+- Randomly samples a value from the pooling window, weighted by activation magnitude (probability proportional to value).
+- Acts as regularization (like dropout), avoids always picking the same max, improves generalization.
+
+**4. Mixed Pooling:**
+- Combination: $\text{output} = \lambda \cdot \text{max} + (1-\lambda) \cdot \text{avg}$.
+- $\lambda$ can be learned or fixed; balances detail-preservation (max) with smoothing (avg).
+
+**5. $L_p$ Pooling:**
+- Generalized norm pooling: $\left( \frac{1}{n}\sum |x_i|^p \right)^{1/p}$.
+- $p=1$ gives average, $p \to \infty$ gives max. Tunable $p$ gives flexibility between the two extremes.
+
+**6. Generalized Mean Pooling (GeM):**
+- Learnable version of $L_p$ pooling where $p$ is a trainable parameter.
+- Popular in image retrieval/metric learning (better than GAP for fine-grained features).
+
+**7. Fractional Max Pooling:**
+- Uses non-integer pooling ratios (e.g., downsample by 1.5x instead of 2x).
+- Produces smoother reduction in spatial size, useful for deeper networks needing finer control.
+
+**8. Spatial Pyramid Pooling (SPP):**
+- Pools at multiple scales (e.g., 1x1, 2x2, 4x4 grids) and concatenates results.
+- Produces fixed-length output regardless of input size, used in object detection backbones.
+
+**9. RoI Pooling / RoIAlign:**
+- Pools variable-sized region proposals into fixed-size feature maps.
+- RoIAlign uses bilinear interpolation (no quantization), critical for accurate instance segmentation (Mask R-CNN).
+
+**10. Adaptive Pooling:**
+- Automatically determines pooling window/stride to produce a specified fixed output size regardless of input resolution.
+
+**11. Blur Pooling (Anti-aliased downsampling):**
+- Applies a low-pass (blur) filter before/during pooling to reduce aliasing artifacts from naive stride-based downsampling.
+- Improves shift-invariance (addresses a known weakness of standard max pooling).
+
+**12. Soft/Attention Pooling:**
+- Learns per-location attention weights, then computes weighted sum instead of hard max/average.
+- More expressive, lets the network decide which regions matter most for the task.
+
+**Quick guidance on when to use what:**
+
+| Goal | Preferred pooling |
+|---|---|
+| Classification head, reduce params | Global Average Pooling |
+| Fine-grained retrieval/embeddings | GeM pooling |
+| Object detection (fixed-size RoI features) | RoIAlign / SPP |
+| Regularization during training | Stochastic pooling |
+| Avoiding aliasing on downsampling | Blur pooling |
+| Task-adaptive importance weighting | Attention/soft pooling |
 
 ---
 
