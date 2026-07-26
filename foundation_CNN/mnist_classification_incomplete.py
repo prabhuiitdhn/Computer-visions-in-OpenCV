@@ -212,28 +212,28 @@ mnist_model_sequential architecture trace for input shape (1, 32, 32)  [channels
 Table: Layer Type | Hyperparameters | Calculation | Learnable Parameters | Output Dimension
 
 --------------------------------------------------------------------------------------------------------------------------------------------------------
-#   | Layer Type   | Hyperparameters                                    | Calculation                                          | Learnable Parameters      | Output Dimension
+#   | Layer Type   | Hyperparameters                                    | Calculation                                          | Learnable Parameters       | Output Dimension
 --------------------------------------------------------------------------------------------------------------------------------------------------------
-0   | Input        | -                                                   | -                                                     | 0                          | (1, 32, 32)
+0   | Input        | -                                                  | -                                                    | 0                          | (1, 32, 32)
 1   | Conv2d       | in=1, out=64, kernel=3x3, stride=1, padding=same   | O = floor(((32-3)+(2*1))/1) + 1 = 32                 | weights: 1*3*3*64=576      | (64, 32, 32)
-    |              |                                                     |                                                       | bias: 64  -> total 640     |
+    |              |                                                    |                                                      | bias: 64  -> total 640     |
 2   | BatchNorm2d  | num_features=64, affine=True                       | normalizes per-channel, no spatial change            | gamma:64 + beta:64 = 128   | (64, 32, 32)
-3   | ReLU         | -                                                   | elementwise, no shape change                         | 0                          | (64, 32, 32)
+3   | ReLU         | -                                                  | elementwise, no shape change                         | 0                          | (64, 32, 32)
 4   | MaxPool2d    | kernel=2x2, stride=2                               | O = floor(((32-2)+0)/2) + 1 = 16                     | 0                          | (64, 16, 16)
 5   | Conv2d       | in=64, out=128, kernel=3x3, stride=1, padding=same | O = floor(((16-3)+(2*1))/1) + 1 = 16                 | weights: 64*3*3*128=73728  | (128, 16, 16)
-    |              |                                                     |                                                       | bias: 128 -> total 73856   |
+    |              |                                                    |                                                      | bias: 128 -> total 73856   |
 6   | BatchNorm2d  | num_features=128, affine=True                      | normalizes per-channel, no spatial change            | gamma:128 + beta:128 = 256 | (128, 16, 16)
-7   | ReLU         | -                                                   | elementwise, no shape change                         | 0                          | (128, 16, 16)
+7   | ReLU         | -                                                  | elementwise, no shape change                         | 0                          | (128, 16, 16)
 8   | MaxPool2d    | kernel=2x2, stride=2                               | O = floor(((16-2)+0)/2) + 1 = 8                      | 0                          | (128, 8, 8)
-9   | Flatten      | -                                                   | 128 * 8 * 8 = 8192                                   | 0                          | (8192,)
+9   | Flatten      | -                                                  | 128 * 8 * 8 = 8192                                   | 0                          | (8192,)
 10  | Linear       | in_features=8192, out_features=1024                | weight matrix 8192 x 1024                            | weights: 8192*1024=8388608 | (1024,)
-    |              |                                                     |                                                       | bias: 1024 -> total 8389632|
-11  | ReLU         | -                                                   | elementwise, no shape change                         | 0                          | (1024,)
+    |              |                                                    |                                                      | bias: 1024 -> total 8389632|
+11  | ReLU         | -                                                  | elementwise, no shape change                         | 0                          | (1024,)
 12  | Linear       | in_features=1024, out_features=256                 | weight matrix 1024 x 256                             | weights: 1024*256=262144   | (256,)
-    |              |                                                     |                                                       | bias: 256 -> total 262400  |
-13  | ReLU         | -                                                   | elementwise, no shape change                         | 0                          | (256,)
+    |              |                                                    |                                                      | bias: 256 -> total 262400  |
+13  | ReLU         | -                                                  | elementwise, no shape change                         | 0                          | (256,)
 14  | Linear       | in_features=256, out_features=10                   | weight matrix 256 x 10                               | weights: 256*10=2560       | (10,)
-    |              |                                                     |                                                       | bias: 10  -> total 2570    |
+    |              |                                                    |                                                      | bias: 10  -> total 2570    |
 --------------------------------------------------------------------------------------------------------------------------------------------------------
 
 Total learnable parameters = 640 + 128 + 73856 + 256 + 8389632 + 262400 + 2570 = 8,729,482
