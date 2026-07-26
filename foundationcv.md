@@ -84,16 +84,21 @@ $$
 Laplacian enhances edges by boosting regions where intensity changes rapidly.
 
 How it works:
-1. Compute Laplacian response:
+- Compute Laplacian response:
+
 $$
 L = \nabla^2 I = \frac{\partial^2 I}{\partial x^2} + \frac{\partial^2 I}{\partial y^2}
 $$
-2. This response is near zero in flat regions and large around edges.
-3. Add or subtract it from the original image to sharpen edges:
+
+- This response is near zero in flat regions and large around edges.
+
+- Add or subtract it from the original image to sharpen edges:
+
 $$
 I_{\text{sharp}} = I - \alpha \nabla^2 I
 $$
-(If your kernel sign is opposite, use $I_{\text{sharp}} = I + \alpha \nabla^2 I$.)
+
+   (If your kernel sign is opposite, use $I_{\text{sharp}} = I + \alpha \nabla^2 I$.)
 
 Quick intuition:
 - Flat area: little change, so almost no effect.
