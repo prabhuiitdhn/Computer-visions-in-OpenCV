@@ -81,6 +81,27 @@ $$
 
 **Laplacian:** second derivative, edge enhancement.
 
+Laplacian enhances edges by boosting regions where intensity changes rapidly.
+
+How it works:
+1. Compute Laplacian response:
+$$
+L = \nabla^2 I = \frac{\partial^2 I}{\partial x^2} + \frac{\partial^2 I}{\partial y^2}
+$$
+2. This response is near zero in flat regions and large around edges.
+3. Add or subtract it from the original image to sharpen edges:
+$$
+I_{\text{sharp}} = I - \alpha \nabla^2 I
+$$
+(If your kernel sign is opposite, use $I_{\text{sharp}} = I + \alpha \nabla^2 I$.)
+
+Quick intuition:
+- Flat area: little change, so almost no effect.
+- Edge area: big second-derivative response, so contrast at boundaries increases.
+
+Practical note:
+- Laplacian is noise-sensitive, so usually apply slight Gaussian blur first (LoG idea) before sharpening.
+
 $$
 L = \begin{bmatrix}
 0 & -1 & 0 \\
