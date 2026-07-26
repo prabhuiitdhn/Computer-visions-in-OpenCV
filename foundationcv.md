@@ -291,6 +291,42 @@ How it helps:
 
 Common use: semantic segmentation (DeepLab), where you need both fine detail (high resolution) and wide context (large receptive field) simultaneously.
 
+**What is transposed convolution and its output size formula:**
+
+Transposed convolution (a.k.a. "deconvolution" or "fractionally-strided convolution") does the opposite spatial operation of a regular convolution, it upsamples a smaller feature map into a larger one, learnably. It's not the mathematical inverse of convolution (doesn't perfectly undo it), but it reverses the shape transformation.
+
+Why it's needed: regular convolution/pooling shrinks spatial size (encoder). Tasks like segmentation, GANs, and autoencoders need to expand it back (decoder), transposed convolution learns how to expand, unlike simple upsampling (nearest/bilinear) which is fixed/non-learnable.
+
+How it works: instead of sliding the kernel over the input to collapse a patch into one output value (like normal conv), transposed convolution does the reverse: it takes each single input pixel, multiplies it by the entire kernel, and scatters/adds that result into the (larger) output, overlapping regions are summed.
+
+Visualization (input 2x2, kernel 2x2, stride 1, no padding):
+
+```
+Input (2x2):        Kernel (2x2):        Output (3x3):
+1 2                  a b                  1a      1b+2a      2b
+3 4                  c d           ->     1c+3a   1d+2c+3b+4a  2d+4b
+                                          3c      3d+4c        4d
+```
+
+Each input value is "stamped" by the full kernel into the output, and overlapping stamps are added together.
+
+Output size formula:
+
+$$
+O = (I - 1) \times S - 2P + K
+$$
+
+where $I$ = input size, $K$ = kernel size, $S$ = stride, $P$ = padding.
+
+(Some frameworks add an `output_padding` term for stride > 1 cases to resolve ambiguity: $O = (I-1) \times S - 2P + K + \text{output\_padding}$.)
+
+Key properties:
+1. Learnable upsampling, kernel weights are trained, unlike fixed interpolation (bilinear/nearest).
+2. Stride controls upsampling factor, stride=2 roughly doubles spatial size.
+3. Checkerboard artifacts, a known issue when kernel size isn't divisible by stride, causing uneven overlap, often mitigated by using resize + conv instead in modern architectures.
+
+Common uses: semantic segmentation decoders (FCN, U-Net upsampling path), GAN generators (upsample noise/latent vector to full image), autoencoder decoders.
+
 **Why pooling is lossy compression (short explanation):**
 - You throw away exact pixel-level position and sub-values within each pooling window, keeping only one number (max or average). This is like JPEG compression: you lose detail permanently; it can't be reconstructed exactly.
 - Why it's usually fine for classification: classification only needs to know what object is present, not exactly where each edge/texture pixel is. The discarded information is mostly high-frequency noise and minor spatial detail, irrelevant to "is this a cat or dog?".
