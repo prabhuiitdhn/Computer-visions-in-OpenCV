@@ -258,6 +258,39 @@ Pooling is lossy compression. The information discarded is typically high-freque
 2. **Deconvolution/transposed convolution:** upsample and recover spatial detail.
 3. **Skip connections (U-Net):** bypass pooling to preserve resolution.
 
+**What is dilated convolution and how does it help:**
+
+Dilated (atrous) convolution inserts gaps between kernel elements, letting the kernel cover a larger area of the input without increasing the number of parameters or losing resolution (no extra pooling/stride needed).
+
+Formula (effective kernel size):
+
+$$
+K_{\text{eff}} = K + (K-1)(d-1)
+$$
+
+where $d$ = dilation rate ($d=1$ is normal convolution).
+
+Visualization (3x3 kernel, dilation=2):
+
+```
+Normal conv (d=1):          Dilated conv (d=2):
+X X X                       X . X . X
+X X X                       . . . . .
+X X X                       X . X . X
+(covers 3x3 area)           . . . . .
+                            X . X . X
+                           (covers 5x5 area, same 9 weights)
+```
+
+`X` = actual kernel weight position, `.` = skipped input pixel (gap, not used).
+
+How it helps:
+1. Larger receptive field without adding pooling/stride, preserves spatial resolution (critical for segmentation).
+2. No extra parameters, still only 9 weights (3x3), just spread out.
+3. Avoids information loss from downsampling, while still "seeing" a bigger context.
+
+Common use: semantic segmentation (DeepLab), where you need both fine detail (high resolution) and wide context (large receptive field) simultaneously.
+
 **Why pooling is lossy compression (short explanation):**
 - You throw away exact pixel-level position and sub-values within each pooling window, keeping only one number (max or average). This is like JPEG compression: you lose detail permanently; it can't be reconstructed exactly.
 - Why it's usually fine for classification: classification only needs to know what object is present, not exactly where each edge/texture pixel is. The discarded information is mostly high-frequency noise and minor spatial detail, irrelevant to "is this a cat or dog?".
