@@ -258,6 +258,12 @@ Pooling is lossy compression. The information discarded is typically high-freque
 2. **Deconvolution/transposed convolution:** upsample and recover spatial detail.
 3. **Skip connections (U-Net):** bypass pooling to preserve resolution.
 
+**Why pooling is lossy compression (short explanation):**
+- You throw away exact pixel-level position and sub-values within each pooling window, keeping only one number (max or average). This is like JPEG compression: you lose detail permanently; it can't be reconstructed exactly.
+- Why it's usually fine for classification: classification only needs to know what object is present, not exactly where each edge/texture pixel is. The discarded information is mostly high-frequency noise and minor spatial detail, irrelevant to "is this a cat or dog?".
+- Why it hurts segmentation/localization: segmentation needs a label for every pixel, so exact spatial position matters. Once pooling discards fine spatial detail, you can't perfectly recover pixel-accurate boundaries later, even with upsampling, the reconstruction is approximate, causing blurry/imprecise object edges.
+- One-line takeaway: pooling trades spatial precision for computational efficiency and invariance, great for "what" tasks (classification), harmful for "where" tasks (segmentation) unless mitigated (skip connections, dilated convolution, RoIAlign).
+
 **Information-theoretic view:**
 Pooling is a form of dimensionality reduction. In max pooling, we retain the maximum activation, sacrificing all sub-maximum activations. This is justified by the assumption that small spatial shifts should not change the output (invariance), but this assumption fails for tasks requiring precise localization.
 
