@@ -29,10 +29,10 @@
 **Mathematical formulation:**
 
 $$
-(I \ast K)(x, y) = \sum_{i=0}^{k_h-1} \sum_{j=0}^{k_w-1} K(i, j) \cdot I\big(x + \lfloor k_h/2 \rfloor - i,\; y + \lfloor k_w/2 \rfloor - j\big)
+(I \ast K)(x, y) = \sum_{i=0}^{k_h-1} \sum_{j=0}^{k_w-1} I\big(x + i - c_h,\; y + j - c_w\big) \cdot K\big(c_h - i,\; c_w - j\big)
 $$
 
-where $I$ is the image, $K$ is a $k_h \times k_w$ kernel, and the result is a filtered image.
+where $I$ is the image, $K$ is a $k_h \times k_w$ kernel, $c_h = \lfloor k_h/2 \rfloor$, $c_w = \lfloor k_w/2 \rfloor$, and the result is a filtered image.
 
 **Why it's fundamental:**
 1. **Locality:** Convolution respects spatial locality—output depends only on nearby pixels.
