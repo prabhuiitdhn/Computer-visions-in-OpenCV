@@ -647,6 +647,30 @@ Transfer learning has become fundamental in computer vision:
 3. **Domain shift:** models trained on ImageNet may not work well on medical images or satellite imagery. Domain adaptation techniques address this.
 4. **Few-shot learning:** meta-learning approaches enable learning from very few examples.
 
+**What is few-shot learning (simple explanation with example):**
+
+Few-shot learning means training a model to recognize new categories using only a handful of examples (like 1-5 images per class), instead of the thousands normally needed.
+
+Simple analogy: if you show a child just 2-3 pictures of a "zebra" they've never seen before, they can usually recognize a zebra in a new photo afterward. They don't need 1,000 zebra photos like a typical deep learning model does. Few-shot learning tries to give models this same human-like ability.
+
+Concrete example:
+- Normal deep learning: To classify "cats vs dogs," you need thousands of labeled cat/dog images to train from scratch.
+- Few-shot learning: You show the model just 5 images of a brand-new animal (say, a "red panda") it has never seen, and it should now be able to recognize red pandas in new photos.
+
+How it typically works (simplified):
+1. The model is pre-trained on many different categories (not the target one) to learn a general sense of "what makes objects similar or different" (an embedding space).
+2. At test time, you give it a support set (few labeled examples of the new class, e.g., 5 red panda images).
+3. For a new query image, the model checks: "which support example is my new image closest to in that learned similarity space?" and picks the nearest match.
+
+Common terms:
+- N-way K-shot: e.g., "5-way 1-shot" means classify among 5 new classes, using only 1 example per class.
+- Support set: the few labeled examples given for the new classes.
+- Query set: the new/unseen samples the model must classify.
+
+Why it matters: useful when collecting large labeled datasets is expensive or impossible, e.g., rare diseases in medical imaging, new products in retail, or rare wildlife species.
+
+One-line summary: Few-shot learning teaches a model to generalize from just a few examples per new class, by first learning general similarity patterns from lots of other data, then comparing new examples against that learned notion of similarity.
+
 ---
 
 ### Q10. What is the difference between data augmentation and regularization in the context of overfitting?
