@@ -540,6 +540,26 @@ This decoupling between train and test can cause domain shift if training and te
 1. During training: randomly set each activation to 0 with probability $p$ (typically $p=0.5$). Scale remaining activations by $\frac{1}{1-p}$ to maintain expected value.
 2. During testing: use all activations without dropping.
 
+**Simple explanation w.r.t. model training:**
+
+In simple terms, during each training step, dropout randomly "switches off" some neurons so the model doesn't rely too much on any single one.
+
+Step by step:
+1. Randomly zero out neurons: For each neuron, flip a biased coin with probability $p$ (e.g., 0.5). If it "hits," set that neuron's output to 0 for this forward pass. So roughly half the neurons are temporarily deleted for this batch.
+2. Why scale the rest by $\frac{1}{1-p}$: If you drop 50% of neurons, the total signal reaching the next layer is now only half as strong (since half the values are 0). To keep the average signal strength the same as when dropout is OFF (at test time), you boost the surviving neurons: divide by $(1-p)$, e.g., multiply remaining activations by $\frac{1}{1-0.5} = 2$.
+
+Concrete example (p=0.5):
+- Neuron outputs before dropout: `[2, 4, 6, 8]`
+- Randomly drop 2 of them: `[2, 0, 6, 0]`
+- Scale survivors by $\frac{1}{1-0.5}=2$: `[4, 0, 12, 0]`
+- Average of original = 5, average of scaled-dropped = 4 (close, keeps expected value roughly stable across many batches/neurons).
+
+Why this matters for training:
+- Each mini-batch, a different random subset of neurons is active, forcing every neuron to learn useful features independently, not co-depend on specific teammates.
+- At test time, dropout is turned OFF and all neurons are used (no scaling needed since scaling was already applied during training), giving a stable, ensemble-like prediction.
+
+One-line summary: Randomly delete some neurons each training step and boost the rest so the signal strength stays balanced, this prevents overfitting by stopping neurons from over-relying on each other.
+
 **Intuition:**
 - Co-adaptation problem: neurons can become highly dependent on specific other neurons, memorizing training data.
 - Dropout forces each neuron to be useful on its own and in different contexts (different subsets of other neurons).
