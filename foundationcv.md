@@ -724,7 +724,7 @@ Deep networks trained with backpropagation suffer from vanishing gradients—gra
 
 **Why skip connections help:**
 1. **Gradient flow:** the identity connection ($+x$) allows gradients to flow directly backward without multiplication chains.
-2. **Easier optimization:** instead of learning $y = F(x)$, the network learns $y = F(x) + x$, i.e., the residual $\Delta y = F(x)$. Residuals are typically smaller, easier to learn.
+2. **Easier optimization:** instead of learning $y = F(x)$, the network learns $y = F(x) + x$ , i.e., the residual $\Delta y = F(x)$. Residuals are typically smaller, easier to learn.
 3. **Implicit regularization:** encouraging small residuals is a form of regularization.
 
 **Architectural details:**
