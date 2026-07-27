@@ -740,6 +740,7 @@ ReLU(x + output)  ← Skip connection
 ```
 
 If input and output channels differ, a 1×1 convolution projects the skip:
+
 $$
 y = F(x) + W_s x
 $$
