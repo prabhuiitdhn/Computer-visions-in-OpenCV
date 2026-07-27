@@ -745,6 +745,49 @@ $$
 y = F(x) + W_s x
 $$
 
+**How input and output are connected in skip connections (sum vs. concatenation, shape mismatch handling):**
+
+In ResNet-style skip connections, it's element-wise addition (sum), not concatenation.
+
+Sum vs Concatenation:
+- ResNet (skip connection): element-wise add, $y = F(x) + x$. Output channels stay the same as $F(x)$ (channels unchanged). Cheap in memory.
+- DenseNet: concatenate along channel dim, $y = [F(x), x]$. Output channels grow (sum of both channel counts). More expensive (channels accumulate).
+
+For ResNet, addition requires $F(x)$ and $x$ to have exactly the same shape (same channels, height, width), you can't add tensors of different shapes.
+
+What happens when shapes mismatch: two things can cause a mismatch:
+1. Channel count differs (e.g., input has 64 channels, $F(x)$ outputs 128 channels).
+2. Spatial size differs (e.g., a stride-2 conv inside $F(x)$ halves height/width).
+
+Solution: projection shortcut, apply a 1x1 convolution with matching stride to $x$ before adding:
+
+$$
+y = F(x) + W_s x
+$$
+
+Here $W_s$ (the 1x1 conv) does two jobs simultaneously:
+- Changes channel count: 1x1 conv with out_channels=128 maps 64 to 128 channels.
+- Changes spatial size: using stride=2 in that same 1x1 conv downsamples $x$ to match $F(x)$'s reduced spatial size.
+
+Concrete example:
+
+```
+Input x: (64, 56, 56)
+F(x) after two convs (stride=2 in first): (128, 28, 28)
+
+Since x is (64,56,56) and F(x) is (128,28,28), shapes don't match, can't add directly.
+
+Apply projection: W_s = Conv2d(in=64, out=128, kernel=1x1, stride=2)
+W_s(x) -> (128, 28, 28)  now matches F(x)
+
+y = F(x) + W_s(x)  -> element-wise add, same shape (128, 28, 28)
+```
+
+Summary:
+- Same shape already: identity shortcut, just add directly, $y = F(x) + x$.
+- Shape mismatch (channels and/or spatial size): use a 1x1 conv (with appropriate stride) as $W_s$ to reshape $x$ so it matches $F(x)$, then add element-wise.
+- It is never concatenation in standard ResNet, that's a different architecture family (DenseNet).
+
 **Impact:**
 ResNet enabled:
 1. Training of 152-layer networks (vs. 22-layer VGGNet).
