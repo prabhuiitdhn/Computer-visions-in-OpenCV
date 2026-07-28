@@ -1397,8 +1397,14 @@ Breaking down each term:
 - The generator wants to fool the discriminator, i.e., it wants $D(G(z))$ to be high (close to 1), which means it wants to minimize $\log(1 - D(G(z)))$.
 
 Putting it together:
-- Discriminator's objective: $\max_D \; \mathbb{E}_{x \sim p_{\text{data}}}[\log D(x)] + \mathbb{E}_{z \sim p_z}[\log(1 - D(G(z)))]$
-- Generator's objective: $\min_G$ of that same expression (only the second term depends on $G$).
+
+Discriminator's objective:
+
+$$
+\max_D \; \mathbb{E}_{x \sim p_{\text{data}}}[\log D(x)] + \mathbb{E}_{z \sim p_z}[\log(1 - D(G(z)))]
+$$
+
+Generator's objective: $\min_G$ of that same expression (only the second term depends on $G$).
 
 This matches the standard two-player minimax game exactly: $\min_G \max_D V(D, G)$, where $D$ and $G$ have opposing objectives over the same value function $V$. The formula in the file is correct and matches the original GAN paper's formulation.
 
