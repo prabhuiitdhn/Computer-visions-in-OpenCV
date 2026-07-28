@@ -1357,7 +1357,7 @@ Image → Patch Embedding → Transformer Encoder → Classification Head
 |---|---|---|
 | Inductive bias | Local connectivity, translation equivariance | None (learned from data) |
 | Data efficiency | Good (works with limited data) | Poor (needs large datasets) |
-| Computational cost | Linear in spatial size ($O(HW)$) | Quadratic in spatial size ($O((HW)^2)$) |
+| Computational cost | Linear in spatial size ($O(HW)$) | Quadratic in spatial size ($O(H^2W^2)$) |
 | Interpretability | Receptive field grows gradually | Attention weights show direct dependencies |
 
 **Why ViT works:**
