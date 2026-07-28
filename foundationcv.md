@@ -980,6 +980,112 @@ One-line summary: $d_k$ is the key/query vector dimension; larger $d_k$ inflates
 
 ---
 
+### Q12.2. Explain multi-head attention with sample examples, how are heads concatenated?
+
+**A:** Multi-head attention runs several independent attention "heads" in parallel, each looking at the input from a different learned perspective, then concatenates their outputs and projects them back to the original dimension.
+
+Why multiple heads: a single attention head computes one weighted average per query. But different aspects of a sentence/image might need different types of relationships (e.g., one head might track "which object is near which," another might track "same color," another "same object identity"). Multiple heads let the model learn several such relationship types simultaneously.
+
+Formula:
+
+$$
+\text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1, \ldots, \text{head}_h)W^O
+$$
+
+where each head is:
+
+$$
+\text{head}_i = \text{Attention}(QW_i^Q, KW_i^K, VW_i^V)
+$$
+
+Step-by-step with a concrete example: say model dimension $d_{model} = 512$, and we use $h = 8$ heads.
+
+Step 1, split into heads: each head gets its own smaller projection matrices $W_i^Q, W_i^K, W_i^V$ mapping the full 512-dim vector down to $d_k = d_v = 512/8 = 64$ dimensions.
+
+```
+Input embedding (512-dim) for a token
+        |
+   ┌────┼────┬────┬────┬────┬────┬────┬────┐
+  W1Q  W2Q  W3Q  W4Q  W5Q  W6Q  W7Q  W8Q   (8 separate projections, each 512->64)
+   |    |    |    |    |    |    |    |
+ head1 head2 head3 ... ... ... ... head8   (each outputs 64-dim vector per token)
+```
+
+Step 2, each head computes its own attention independently:
+
+$$
+\text{head}_i = \text{softmax}\left(\frac{(QW_i^Q)(KW_i^K)^\top}{\sqrt{d_k}}\right)(VW_i^V)
+$$
+
+Each head produces an output of shape (sequence_length, 64), a 64-dim vector per token, but computed using that head's own Q/K/V projections (so each head can specialize).
+
+Step 3, concatenate all heads side-by-side (along the feature dimension). For one token, suppose the 8 heads produce:
+
+```
+head1 output: [0.1, 0.2, ..., 0.05]   (64 values)
+head2 output: [0.3, -0.1, ..., 0.4]   (64 values)
+head3 output: [...]                   (64 values)
+...
+head8 output: [...]                   (64 values)
+```
+
+Concatenation just stacks these side-by-side into one long vector:
+
+```
+Concat(head1, head2, ..., head8) = [head1_values | head2_values | ... | head8_values]
+-> length = 64 x 8 = 512   (back to original d_model)
+```
+
+Step 4, final linear projection $W^O$: this concatenated 512-dim vector is passed through one more learned linear layer $W^O$ (512x512) to mix information across heads and produce the final output (still 512-dim), which then continues into the rest of the Transformer layer.
+
+Why concatenation (not sum or average):
+- Sum/average would blend heads together and lose the distinct information each head learned, you couldn't tell which head contributed what.
+- Concatenation preserves each head's output as a separate "slot" in the final vector, and the final $W^O$ projection learns how to optimally combine those distinct pieces of information, giving the network flexibility to weight each head's contribution differently per output feature.
+
+**Full architecture diagram (input embedding through multi-head attention, concatenation, and final linear projection):**
+
+```
+                          Input Embedding
+                        (seq_len x d_model=512)
+                                 |
+                +----------------+----------------+
+                |                |                |
+                v                v                v
+           Linear WQ        Linear WK        Linear WV
+        (512 -> 512)      (512 -> 512)      (512 -> 512)
+                |                |                |
+                v                v                v
+             Q (512)          K (512)          V (512)
+                |                |                |
+     split into h=8 heads of d_k=d_v=64 each (per Q, K, V)
+                |                |                |
+   +------------+------+   +-----+------+   +-----+------+
+   |  |  |  |  |  |  |  |  ...              ...
+  Q1 Q2 Q3 Q4 Q5 Q6 Q7 Q8  K1..K8            V1..V8
+   |  |  |  |  |  |  |  |
+   v  v  v  v  v  v  v  v
+ head1 head2 head3 head4 head5 head6 head7 head8
+  (each: softmax(Qi·Ki^T / sqrt(64)) · Vi -> 64-dim output per token)
+   |  |  |  |  |  |  |  |
+   +--+--+--+--+--+--+--+
+              |
+              v
+   Concat(head1, ..., head8)
+   (seq_len x 512)   <- 8 heads x 64 dims = 512
+              |
+              v
+       Linear W^O
+     (512 -> 512)
+              |
+              v
+     Multi-Head Attention Output
+        (seq_len x 512)
+```
+
+One-line summary: each head independently attends with its own smaller Q/K/V (dimension $d_k = d_{model}/h$), producing a small output vector per token; these per-head vectors are concatenated side-by-side back to the original dimension, then linearly mixed via $W^O$ to produce the final multi-head attention output.
+
+---
+
 ### Q13. What is a Transformer architecture and how does it apply to vision?
 
 **A:** A Transformer is a sequence-to-sequence model based entirely on self-attention, with no recurrence or convolution. For vision, images are divided into patches and treated as sequences.
