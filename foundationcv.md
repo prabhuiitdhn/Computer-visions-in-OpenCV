@@ -1386,6 +1386,22 @@ $$
 
 The generator minimizes the discriminator's ability to distinguish real from fake; the discriminator maximizes this ability.
 
+**Verification of the GAN formula (game theory formulation):**
+
+Yes, this is the correct, standard GAN minimax objective (from Goodfellow et al., 2014).
+
+Breaking down each term:
+- $D(x)$ = probability the discriminator assigns to a real image $x$ being real. The discriminator wants this high for real data, so it maximizes $\log D(x)$.
+- $G(z)$ = a generated (fake) image produced from random noise $z$.
+- $D(G(z))$ = probability the discriminator assigns to a fake image being real. The discriminator wants this low (correctly catching fakes), so it maximizes $\log(1 - D(G(z)))$.
+- The generator wants to fool the discriminator, i.e., it wants $D(G(z))$ to be high (close to 1), which means it wants to minimize $\log(1 - D(G(z)))$.
+
+Putting it together:
+- Discriminator's objective: $\max_D \; \mathbb{E}_{x \sim p_{\text{data}}}[\log D(x)] + \mathbb{E}_{z \sim p_z}[\log(1 - D(G(z)))]$
+- Generator's objective: $\min_G$ of that same expression (only the second term depends on $G$).
+
+This matches the standard two-player minimax game exactly: $\min_G \max_D V(D, G)$, where $D$ and $G$ have opposing objectives over the same value function $V$. The formula in the file is correct and matches the original GAN paper's formulation.
+
 **Training dynamics:**
 1. **Generator:** learns to produce images close to real data distribution.
 2. **Discriminator:** learns to distinguish real from fake.
