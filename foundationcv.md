@@ -939,6 +939,47 @@ Vision Transformers (ViT) replace all convolutions with attention, proving pure 
 
 ---
 
+### Q12.1. What is the relevance of $d_k$ in the attention mechanism?
+
+**A:** $d_k$ is the dimensionality of the Key (and Query) vectors in attention. It appears in the scaled dot-product attention formula as the scaling factor:
+
+$$
+\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^{\top}}{\sqrt{d_k}}\right)V
+$$
+
+Why does $d_k$ matter: without dividing by $\sqrt{d_k}$, the dot products $QK^\top$ can become very large as $d_k$ grows, this pushes the softmax into regions with extremely small gradients (saturation), making training unstable/slow.
+
+Why do dot products grow with $d_k$: assume each element of $Q$ and $K$ is a random variable with mean 0 and variance 1 (typical after initialization/normalization). The dot product of two $d_k$-dimensional vectors is a sum of $d_k$ independent products:
+
+$$
+q \cdot k = \sum_{i=1}^{d_k} q_i k_i
+$$
+
+- Each term $q_i k_i$ has variance $\approx 1$.
+- Summing $d_k$ independent terms, the variance of the sum grows to $\approx d_k$.
+- So the standard deviation of $q \cdot k$ grows like $\sqrt{d_k}$.
+
+Dividing by $\sqrt{d_k}$ rescales the dot product back to variance approximately 1, keeping values in a stable range regardless of dimension size.
+
+Concrete example: say $d_k = 64$ (typical per-head dimension in a Transformer).
+- Each $q_i, k_i \sim \mathcal{N}(0, 1)$.
+- Dot product $q \cdot k$ has expected variance $\approx 64$, standard deviation $\approx 8$.
+- So raw dot-product scores might range roughly from $-24$ to $+24$ (3 std devs).
+- Feeding these into softmax: $e^{24}$ vs $e^{-24}$, softmax becomes nearly one-hot (extremely peaked), gradients vanish almost everywhere except the single max.
+- After scaling by $\sqrt{64} = 8$: scores now range roughly $-3$ to $+3$, softmax stays in a well-behaved range with meaningful gradients across multiple positions, not just one spike.
+
+Numeric mini-example: suppose $d_k = 4$ and $q = [1, 1, 1, 1]$, $k = [1, 1, 1, 1]$:
+
+$$
+q \cdot k = 1+1+1+1 = 4, \quad \sqrt{d_k} = \sqrt{4} = 2, \quad \frac{q\cdot k}{\sqrt{d_k}} = 2
+$$
+
+If $d_k = 100$ instead (same pattern, all 1s): $q \cdot k = 100$, $\sqrt{100}=10$, scaled score $=10$. Without scaling, the unscaled score of $100$ would be enormous going into softmax (essentially infinity relative to other scores), while the scaled version ($10$) stays in a more reasonable, comparable range as dimensionality changes.
+
+One-line summary: $d_k$ is the key/query vector dimension; larger $d_k$ inflates dot-product magnitudes proportionally to $\sqrt{d_k}$, so dividing by $\sqrt{d_k}$ keeps attention scores in a stable range regardless of how large the embedding dimension is, preventing softmax saturation and vanishing gradients.
+
+---
+
 ### Q13. What is a Transformer architecture and how does it apply to vision?
 
 **A:** A Transformer is a sequence-to-sequence model based entirely on self-attention, with no recurrence or convolution. For vision, images are divided into patches and treated as sequences.
