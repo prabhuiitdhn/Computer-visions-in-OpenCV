@@ -804,6 +804,90 @@ Modern networks balance depth and skip density to optimize gradient flow.
 
 ---
 
+### Q11.1. How should residual learning be understood with respect to skip connections?
+
+**A:** Residual learning means the network doesn't try to learn the entire output from scratch, it only learns the difference (residual) between the input and the desired output.
+
+Without skip connections (traditional learning): a normal layer tries to directly learn the full mapping:
+
+$$
+y = F(x)
+$$
+
+$F$ must learn the complete transformation from $x$ to $y$, including whatever part of $x$ should just pass through unchanged. This is harder because even "do nothing" requires the layer to learn an identity function, which is surprisingly difficult for stacked non-linear layers to approximate exactly.
+
+With skip connections (residual learning):
+
+$$
+y = F(x) + x
+$$
+
+Now $F(x)$ only needs to learn the residual, the small correction/adjustment needed on top of $x$:
+
+$$
+F(x) = y - x \quad \text{(the "change" needed)}
+$$
+
+Simple analogy: imagine you're editing a document.
+- Without residual learning: you rewrite the entire document from memory every time (hard, error-prone, easy to lose good content).
+- With residual learning: you only write down the edits/corrections (add this sentence, delete that word), the original document stays as the base, and your edits are layered on top.
+
+Why this is easier to learn:
+1. If the ideal mapping is close to identity (i.e., $y \approx x$), then $F(x)$ just needs to learn something close to zero, this is a much easier target for gradient descent than learning a full identity mapping through non-linear layers.
+2. Small residuals mean small gradients needed, which means more stable training, especially in very deep networks (100+ layers) where errors would otherwise compound.
+3. The network can choose to "skip" a layer's contribution by driving $F(x) \to 0$, effectively letting information flow through unchanged if that layer isn't useful yet, this avoids degradation problems seen in very deep plain networks.
+
+One-line summary: instead of forcing each block to reconstruct the whole answer, residual learning lets each block just learn the small "correction" on top of what it already received, much easier to optimize, especially as networks get very deep.
+
+---
+
+### Q11.2. What is a residual block in short?
+
+**A:** A residual block is the basic building unit of a ResNet, a small group of layers (usually 2-3 convolutions + BatchNorm + ReLU) whose output is added back to its own input via a skip connection.
+
+Structure:
+
+```
+Input x
+  ↓
+Conv → BatchNorm → ReLU
+  ↓
+Conv → BatchNorm
+  ↓
+Add x (skip connection)
+  ↓
+ReLU
+  ↓
+Output
+```
+
+Formula: $y = F(x) + x$, where $F(x)$ is the stack of conv layers inside the block.
+
+One-line summary: it's a mini-module that learns a small correction ($F(x)$) on top of its input ($x$), rather than learning the full output from scratch, stacking many of these blocks lets you train very deep networks (ResNet-50, ResNet-101, etc.) without vanishing-gradient problems.
+
+---
+
+### Q11.3. Is residual connection and skip connection the same?
+
+**A:** Yes, in the context of ResNet, residual connection and skip connection refer to the same thing, used interchangeably.
+
+Why two names exist:
+- "Skip connection" describes the structure: a connection that "skips over" one or more layers, feeding the input directly to a later point in the network.
+- "Residual connection" describes the purpose: it enables the block to learn a residual (the difference $F(x) = y - x$) instead of the full mapping.
+
+Same thing, different emphasis:
+
+| Term | Emphasizes |
+|---|---|
+| Skip connection | The wiring/topology, input bypasses layers |
+| Residual connection | The learning objective, layers learn a correction, not the full output |
+
+One-line summary: "Skip connection" is the mechanism (the +x wire), "residual connection" is what that mechanism enables (residual learning), in ResNet, they're the same connection, just named from two different angles (structure vs. purpose).
+
+Note: not all skip connections are residual (additive). Some (like in DenseNet or U-Net) skip via concatenation instead of addition, those are still called "skip connections" but not typically "residual connections," since they don't frame the block's job as learning a residual.
+
+---
+
 ### Q12. What are attention mechanisms and how do they differ from convolution?
 
 **A:** Attention mechanisms learn to focus on relevant parts of input by computing weighted combinations of features, allowing the network to dynamically ignore irrelevant regions.
