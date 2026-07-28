@@ -1086,6 +1086,257 @@ One-line summary: each head independently attends with its own smaller Q/K/V (di
 
 ---
 
+### Q12.3. Explain the patch embedding for an example of (32, 32, 3) image with P=16, what should the final embedding size be? (calculate step by step)
+
+**A:**
+
+Step 1: Determine number of patches.
+
+$$
+N = \frac{H}{P} \times \frac{W}{P}
+$$
+
+With $H=32$, $W=32$, $P=16$:
+
+$$
+N = \frac{32}{16} \times \frac{32}{16} = 2 \times 2 = 4 \text{ patches}
+$$
+
+So the image gets split into a 2x2 grid of patches:
+
+```
+Original image (32x32x3):
+
++----------------+----------------+
+|                |                |
+|   Patch 1      |   Patch 2      |
+|   (16x16x3)    |   (16x16x3)    |
+|                |                |
++----------------+----------------+
+|                |                |
+|   Patch 3      |   Patch 4      |
+|   (16x16x3)    |   (16x16x3)    |
+|                |                |
++----------------+----------------+
+```
+
+Step 2: Flatten each patch. Each patch has shape 16x16x3. Flatten it into a 1D vector:
+
+$$
+\text{Flattened patch dim} = P \times P \times C = 16 \times 16 \times 3 = 768
+$$
+
+So each patch becomes a vector of length 768.
+
+Step 3: Stack all patches into a sequence.
+
+$$
+\text{Input to linear projection} = N \times (P^2 \times C) = 4 \times 768
+$$
+
+This is a matrix of shape (4, 768), 4 tokens, each 768-dimensional.
+
+Step 4: Linear projection to embedding dimension $D$. A learnable linear layer $E$ maps each 768-dim flattened patch to the embedding dimension $D$ (a hyperparameter you choose, e.g., $D=768$ for ViT-Base, or smaller like $D=256$ for a lightweight model):
+
+$$
+E: \mathbb{R}^{768} \rightarrow \mathbb{R}^{D}
+$$
+
+Picking $D = 256$ for this example:
+
+$$
+(4, 768) \times (768, 256) = (4, 256)
+$$
+
+Output: 4 tokens, each 256-dimensional.
+
+Step 5: Add [CLS] token. ViT prepends a learnable classification token:
+
+$$
+\text{Sequence length} = N + 1 = 4 + 1 = 5
+$$
+
+Shape becomes (5, 256).
+
+Step 6: Add positional encoding. Add a learnable (or sinusoidal) positional embedding of the same shape (5, 256) element-wise, shape unchanged: (5, 256).
+
+Final answer table:
+
+| Step | Shape |
+|---|---|
+| Original image | (32, 32, 3) |
+| Number of patches | N = 4 |
+| Flattened patch | 768 per patch |
+| After linear projection (D=256) | (4, 256) |
+| After adding [CLS] token | (5, 256) |
+| After positional encoding | (5, 256) (unchanged) |
+
+Final embedding size fed into the Transformer encoder: (5, 256), a sequence of 5 tokens (1 CLS + 4 patches), each represented by a 256-dimensional vector.
+
+Note: with such a tiny image (32x32) and large patch size (16x16), you only get 4 patches, in practice ViT is designed for larger images (e.g., 224x224 with P=16 giving 196 patches) so this is a toy-scale example to illustrate the mechanics.
+
+---
+
+### Q12.4. Verify the patch embedding calculation: is patch size (32x32x3)/16 = 192 correct?
+
+**A:** Let's double-check with dimensional analysis, since (H x W x C) / P doesn't match because of how the division was applied.
+
+Total elements in the image (sanity check):
+
+$$
+H \times W \times C = 32 \times 32 \times 3 = 3072 \text{ total values}
+$$
+
+This total must be conserved, no matter how you split the image into patches, the sum of all patch elements must equal 3072.
+
+Where the (H x W x C)/P calculation goes wrong:
+
+$$
+\frac{H \times W \times C}{P} = \frac{32 \times 32 \times 3}{16} = \frac{3072}{16} = 192
+$$
+
+This divides the total image volume by $P$ (not $P^2$), which doesn't correspond to any physical quantity in patch embedding, it's dimensionally inconsistent (mixing a 3D volume with a 1D length).
+
+Correct calculation (verified): a patch is a spatial block of size PxP, taken across all C channels:
+
+$$
+\text{Elements per patch} = P \times P \times C = 16 \times 16 \times 3 = 768
+$$
+
+Number of such patches needed to cover the full image:
+
+$$
+N = \frac{H}{P} \times \frac{W}{P} = \frac{32}{16} \times \frac{32}{16} = 2 \times 2 = 4
+$$
+
+Verify conservation (this proves 768 is correct, not 192):
+
+$$
+N \times \text{(elements per patch)} = 4 \times 768 = 3072
+$$
+
+$$
+3072 = H \times W \times C = 3072 \ \checkmark
+$$
+
+This matches exactly, confirming 768 per patch and 4 patches total is correct.
+
+If we instead used 192 per patch with 4 patches:
+
+$$
+4 \times 192 = 768 \neq 3072 \quad \text{(inconsistent, doesn't reconstruct the original image)}
+$$
+
+So 192 doesn't satisfy the conservation check, which confirms it's not the right patch dimension.
+
+Summary:
+
+| Quantity | Correct value | Formula |
+|---|---|---|
+| Number of patches | N = 4 | (H/P) x (W/P) |
+| Elements per patch (flattened) | 768 | P x P x C |
+| Total elements (check) | 3072 | N x 768 = H x W x C |
+
+So the earlier answer (768 per patch, 4 patches, then projected to embedding dim D) was correct, 192 would only arise from an incorrect formula that doesn't conserve the total image size.
+
+---
+
+### Q12.5. Merged and verified explanation: patch embedding for a (32, 32, 3) image with P=16 (dimension, confusion, calculation, proof, summary table)
+
+**A:**
+
+**1. The dimensions involved:**
+- H = 32 (height), W = 32 (width), C = 3 (channels)
+- P = 16 (patch size, both height and width of each patch)
+- Embedding dimension D, a hyperparameter you choose (e.g., D = 256 used below)
+
+**2. Common confusion (and why it's wrong):** a common mistake is computing patch size as:
+
+$$
+\frac{H \times W \times C}{P} = \frac{32 \times 32 \times 3}{16} = \frac{3072}{16} = 192
+$$
+
+This is dimensionally inconsistent, it divides a 3D volume (H x W x C) by a single 1D length (P), mixing units that don't correspond to any real quantity in patch embedding.
+
+The correct approach treats each patch as a spatial block of size P x P, across all C channels:
+
+$$
+\text{Elements per patch} = P \times P \times C = 16 \times 16 \times 3 = 768
+$$
+
+**3. Step-by-step calculation:**
+
+Step 1, number of patches:
+
+$$
+N = \frac{H}{P} \times \frac{W}{P} = \frac{32}{16} \times \frac{32}{16} = 2 \times 2 = 4
+$$
+
+Step 2, flatten each patch:
+
+$$
+\text{Flattened patch dim} = P \times P \times C = 768
+$$
+
+Step 3, stack patches into a sequence:
+
+$$
+(N, 768) = (4, 768)
+$$
+
+Step 4, linear projection to embedding dim D=256:
+
+$$
+(4, 768) \times (768, 256) = (4, 256)
+$$
+
+Step 5, add [CLS] token:
+
+$$
+N + 1 = 5 \quad \Rightarrow \quad (5, 256)
+$$
+
+Step 6, add positional encoding (shape unchanged):
+
+$$
+(5, 256)
+$$
+
+**4. Proof (conservation check):** the total number of elements must be conserved regardless of how the image is split into patches:
+
+$$
+N \times \text{(elements per patch)} = 4 \times 768 = 3072
+$$
+
+$$
+H \times W \times C = 32 \times 32 \times 3 = 3072 \quad \checkmark \text{ matches}
+$$
+
+Testing the incorrect value (192) against this same check:
+
+$$
+4 \times 192 = 768 \neq 3072 \quad \text{(fails, doesn't reconstruct the original image size)}
+$$
+
+This proves 768 is correct and 192 is not.
+
+**5. Summary table:**
+
+| Step | Description | Formula | Shape | Value |
+|---|---|---|---|---|
+| 0 | Original image | - | (H, W, C) | (32, 32, 3) |
+| 1 | Number of patches | N = (H/P) x (W/P) | scalar | N = 4 |
+| 2 | Flattened patch dimension | P x P x C | per-patch vector | 768 |
+| 3 | Patch sequence (pre-projection) | (N, P^2 C) | (4, 768) | - |
+| 4 | Linear projection to embedding dim | (N, P^2C) x (P^2C, D) | (4, 256) | D = 256 (chosen) |
+| 5 | Add [CLS] token | N + 1 | (5, 256) | 5 tokens |
+| 6 | Add positional encoding | element-wise add, shape unchanged | (5, 256) | - |
+| Proof | Conservation check | N x (P^2C) = H x W x C | - | 4 x 768 = 3072 = 32x32x3 (checkmark) |
+
+Final embedding fed into the Transformer encoder: (5, 256), 1 [CLS] token + 4 patch tokens, each 256-dimensional.
+
+---
+
 ### Q13. What is a Transformer architecture and how does it apply to vision?
 
 **A:** A Transformer is a sequence-to-sequence model based entirely on self-attention, with no recurrence or convolution. For vision, images are divided into patches and treated as sequences.
