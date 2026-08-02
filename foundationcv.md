@@ -1625,6 +1625,84 @@ R-CNN family established the two-stage paradigm (proposal → refinement), which
 
 ---
 
+### Q17.1. Explain "Extract RoI features via RoI pooling (crop feature map, max-pool to fixed size)".
+
+**A:**
+
+#### The problem it solves
+
+In Fast R-CNN, you compute a single CNN feature map for the *whole* image once (efficient), but then you need to extract a feature vector for each **Region of Interest (RoI)**, the candidate boxes that might contain objects. Each RoI has a **different size and aspect ratio** (e.g., one box is 50×80 pixels, another is 200×150 pixels). But the downstream fully-connected classifier layers require a **fixed-size input** (e.g., 7×7×512). RoI pooling bridges this gap.
+
+#### Step-by-step mechanism
+
+**1. Project the RoI onto the feature map**
+
+The original RoI (a box in the original image, e.g., 224×224 image coordinates) must be mapped onto the CNN's feature map, which is smaller due to strides/pooling (e.g., 14×14 if the network downsamples by 16×).
+
+$$
+x_{\text{feat}} = \left\lfloor \frac{x_{\text{image}}}{\text{stride}} \right\rfloor
+$$
+
+So a box at pixel coordinates $(x_1, y_1, x_2, y_2)$ in the original image becomes a smaller box on the feature map.
+
+**2. Crop the feature map**
+
+Extract just the sub-region of the feature map that corresponds to this projected RoI, this gives you a small feature "patch" of variable size (e.g., one RoI might project to a 5×7 patch, another to a 9×4 patch).
+
+**3. Divide into a fixed grid**
+
+Split this variable-size cropped patch into a **fixed number of sub-windows**, typically $7 \times 7 = 49$ bins, regardless of the patch's original size.
+
+$$
+\text{bin width} = \frac{\text{patch width}}{7}, \quad \text{bin height} = \frac{\text{patch height}}{7}
+$$
+
+Since the patch size varies but the grid count (7×7) is always fixed, each bin can contain a different number of underlying feature-map cells (this is where a rounding/quantization step happens, a known source of imprecision).
+
+**4. Max-pool each bin**
+
+For each of the 49 bins, take the **maximum** value across all feature-map cells that fall inside that bin (same idea as regular max pooling, just with variable-size bins instead of fixed-size windows).
+
+Result: a fixed $7 \times 7 \times C$ output (where $C$ = number of channels), **no matter what the original RoI size was**.
+
+#### Visual summary
+
+```
+Original RoI (variable size, e.g. 5x7 feature cells):
++---+---+---+---+---+
+| . | . | . | . | . |
++---+---+---+---+---+
+| . | . | . | . | . |
++---+---+---+---+---+
+   ... (5 rows total)
+
+        |
+        v  divide into fixed 7x7 grid of bins (bin sizes vary per RoI)
+        v  max-pool within each bin
+
+Fixed output (always 7x7 x C):
++--+--+--+--+--+--+--+
+|M |M |M |M |M |M |M |
++--+--+--+--+--+--+--+
+|M |M |M |M |M |M |M |
++--+--+--+--+--+--+--+
+  ... (7 rows total)
+```
+
+#### Why this matters
+
+1. **Enables shared computation:** the expensive CNN forward pass happens once per image, not once per RoI (this was the main speedup Fast R-CNN introduced over R-CNN's 2000 forward passes).
+2. **Fixed-size output:** lets you feed every RoI's features into the same fully-connected layers regardless of the box's original shape/size.
+3. **Trade-off/limitation:** the quantization (rounding RoI boundaries and bin boundaries to integer feature-map coordinates) introduces small misalignments between the RoI and the extracted features, this hurts precision, especially for small objects or pixel-accurate tasks like segmentation.
+
+#### Why Mask R-CNN replaced it with RoIAlign
+
+RoI pooling's quantization/rounding was fine for bounding-box classification, but for pixel-precise mask prediction, the misalignment (up to several pixels) noticeably degraded mask quality. **RoIAlign** fixes this by using **bilinear interpolation** instead of rounding, avoiding quantization entirely and preserving exact spatial correspondence.
+
+**One-line summary:** RoI pooling projects each variable-size RoI onto the shared feature map, crops it, divides the crop into a fixed grid of bins (size varies per RoI, but bin count is always the same), and max-pools each bin, producing a fixed-size feature output regardless of the original RoI's dimensions.
+
+---
+
 ### Q18. What is YOLO and what advantages do one-stage detectors have?
 
 **A:** YOLO (You Only Look Once) divides image into a grid and predicts bounding boxes and class probabilities for each grid cell, achieving real-time detection.

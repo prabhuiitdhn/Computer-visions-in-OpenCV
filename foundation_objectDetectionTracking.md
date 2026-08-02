@@ -273,22 +273,7 @@ IoU = 0.  No overlap.  Loss = 0.  Gradient = 0.  Model stuck.
 
 $$\text{GIoU} = \text{IoU} - \frac{|C \setminus (GT \cup P)|}{|C|}$$
 
-```
-        ┌──────────────────────────┐  ← Enclosing box C (covers BOTH)
-        │                          │
-        │ ┌──────┐      ┌──────┐   │
-        │ │  GT  │      │  P   │   │
-        │ └──────┘      └──────┘   │
-        │                          │
-        │   ↑ wasted space in C    │
-        │   (not covered by GT∪P)  │
-        └──────────────────────────┘
-```
 
-- The **gap between GT and P** inside C is the wasted area
-- Bigger gap → larger wasted area → more negative GIoU → stronger gradient pushing P toward GT
-- Even when IoU = 0, the wasted-area penalty gives a **non-zero gradient**
-- **Range:** $-1 \leq \text{GIoU} \leq 1$
 
 **Limitation:** Doesn't directly minimize *how far apart* the centers are.
 
