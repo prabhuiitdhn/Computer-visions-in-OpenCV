@@ -1486,6 +1486,34 @@ Recent research (Bengio et al.) shows:
 
 ---
 
+### Q16.1. How does a one-stage detector work in simple terms?
+
+**A:** One-stage detectors (like YOLO, SSD) predict everything, object location, size, and class, in a single forward pass through the network, without a separate step to first propose candidate regions.
+
+Simple analogy: imagine looking at a photo once and, in one glance, pointing at every object and saying "dog, top-left, this big" and "car, bottom-right, this big", all at the same time, no second look needed.
+
+How it works, step by step:
+
+1. Divide the image into a grid. E.g., split the image into an $S \times S$ grid of cells (like a checkerboard overlay).
+2. Each grid cell predicts directly:
+   - Is there an object centered in this cell? (objectness/confidence score)
+   - If yes, what's its bounding box (x, y, width, height)?
+   - What class is it (dog, car, person, etc.)?
+3. One single forward pass through the CNN produces all these predictions for every cell simultaneously, no separate "region proposal" network needed (unlike two-stage detectors like Faster R-CNN).
+4. Non-max suppression (NMS): since multiple grid cells might predict boxes for the same object, remove duplicate/overlapping boxes, keeping only the most confident one per object.
+
+Why it's fast:
+- Two-stage detectors: first propose candidate regions (slow step), then classify/refine each one (another pass).
+- One-stage detectors: skip the proposal step entirely, predict boxes + classes directly from the full image in one shot.
+
+Trade-off:
+- Faster (real-time, 45+ FPS).
+- Slightly less accurate, especially for small or overlapping objects, since each grid cell can typically only "claim" one object.
+
+One-line summary: One-stage detectors treat detection as a single dense prediction problem, every location in the image directly predicts "is there an object here, and what/where is it" in one pass, trading a bit of accuracy for a lot of speed.
+
+---
+
 ### Q17. What is R-CNN and how do Faster R-CNN and Mask R-CNN improve upon it?
 
 **A:** R-CNN introduced the idea of extracting regions of interest (RoIs), extracting features, and classifying them. Faster and Mask improve efficiency and extend functionality.
