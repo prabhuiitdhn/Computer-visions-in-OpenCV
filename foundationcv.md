@@ -1876,6 +1876,84 @@ FCN established the encoder-decoder paradigm, which became standard for all dens
 
 ---
 
+### Q22.1. Sample code for fully connected layer vs. fully convolutional layer for image segmentation.
+
+**A:**
+
+#### 1. Fully Connected (FC) approach — the problem
+
+```python
+import torch
+import torch.nn as nn
+
+class FCClassifierHead(nn.Module):
+    """Traditional FC head - requires FIXED input size, loses spatial info."""
+    def __init__(self, in_channels=512, feat_h=7, feat_w=7, num_classes=21):
+        super().__init__()
+        self.flatten = nn.Flatten()
+        self.fc = nn.Linear(in_channels * feat_h * feat_w, num_classes)
+
+    def forward(self, x):
+        # x: (B, 512, 7, 7) -> flatten -> (B, 512*7*7)
+        x = self.flatten(x)
+        x = self.fc(x)          # (B, num_classes)  <-- ONE label for WHOLE image
+        return x
+```
+
+**Why this fails for segmentation:**
+- `nn.Linear` needs a **fixed** flattened size (`512*7*7`), so input image size is locked.
+- Flattening destroys spatial layout, output is a single class vector, not a per-pixel map.
+
+#### 2. Fully Convolutional Network (FCN) — the fix
+
+```python
+class FCNHead(nn.Module):
+    """Replace FC with 1x1 conv -> preserves spatial dims, works for ANY input size."""
+    def __init__(self, in_channels=512, num_classes=21):
+        super().__init__()
+        # 1x1 conv = "per-pixel classifier" applied at every spatial location
+        self.classifier = nn.Conv2d(in_channels, num_classes, kernel_size=1)
+
+    def forward(self, x):
+        # x: (B, 512, H/32, W/32)  <- any H, W works, no flattening
+        x = self.classifier(x)      # (B, num_classes, H/32, W/32)  <- still spatial!
+        return x
+
+
+class SimpleFCN(nn.Module):
+    """End-to-end FCN: backbone -> 1x1 conv classifier -> upsample to input size."""
+    def __init__(self, backbone, num_classes=21):
+        super().__init__()
+        self.backbone = backbone                  # e.g. ResNet without avgpool/fc
+        self.head = FCNHead(512, num_classes)      # 1x1 conv, keeps spatial map
+        # Learnable upsampling (transposed conv) to recover full resolution
+        self.upsample = nn.ConvTranspose2d(
+            num_classes, num_classes, kernel_size=64, stride=32, padding=16
+        )
+
+    def forward(self, x):
+        input_size = x.shape[-2:]                 # (H, W) of original image
+        feat = self.backbone(x)                   # (B, 512, H/32, W/32)
+        seg_map = self.head(feat)                  # (B, num_classes, H/32, W/32)
+        out = self.upsample(seg_map)                # (B, num_classes, ~H, ~W)
+        out = nn.functional.interpolate(out, size=input_size, mode="bilinear", align_corners=False)
+        return out                                  # (B, num_classes, H, W) <- per-pixel class scores
+```
+
+#### Key difference — side by side
+
+| Aspect | FC layer (`nn.Linear`) | FCN layer (`1x1 Conv2d`) |
+|---|---|---|
+| Input size | Fixed (must match training size) | Any size (fully convolutional) |
+| Weight shape | `(out_features, in_features)`, depends on flattened H×W | `(out_channels, in_channels, 1, 1)`, independent of H, W |
+| Output | Single vector per image | Spatial map, one prediction **per pixel location** |
+| Spatial info | Destroyed (flatten) | Preserved |
+| Use case | Image classification | Segmentation, dense prediction |
+
+**One-line summary:** Replacing the FC layer's `Linear(in_features, classes)` with a `Conv2d(in_channels, classes, kernel_size=1)` turns a "whole-image classifier" into a "per-pixel classifier" that runs at every spatial location, that's the entire trick behind FCN, since a 1×1 convolution *is* mathematically a linear layer applied independently to each spatial position, so no flattening is needed and input size becomes arbitrary.
+
+---
+
 ### Q23. What is U-Net and how does it improve upon FCN?
 
 **A:** U-Net is an encoder-decoder architecture with skip connections connecting features at the same resolution level, designed for medical image segmentation with limited training data.
