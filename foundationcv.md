@@ -1514,6 +1514,73 @@ One-line summary: One-stage detectors treat detection as a single dense predicti
 
 ---
 
+### Q16.2. Explain Support Vector Machine (SVM) with respect to object detection in Machine Learning.
+
+**A:**
+
+#### 1. What is an SVM, fundamentally?
+
+An SVM is a **supervised binary classifier** that finds the **optimal separating hyperplane** between two classes of data points in a feature space. "Optimal" means the hyperplane that maximizes the **margin** — the distance between the hyperplane and the nearest data points from each class (called **support vectors**).
+
+Mathematically, for a linearly separable dataset $\{(x_i, y_i)\}$ where $y_i \in \{-1, +1\}$, SVM solves:
+
+$$
+\min_{w, b} \frac{1}{2}\|w\|^2 \quad \text{subject to} \quad y_i(w^T x_i + b) \geq 1 \; \forall i
+$$
+
+Here $w$ is the weight vector (normal to the hyperplane), $b$ is the bias, and the decision boundary is $w^T x + b = 0$.
+
+For real-world data that isn't perfectly separable, a **soft-margin SVM** introduces slack variables $\xi_i$ and a penalty parameter $C$:
+
+$$
+\min_{w,b,\xi} \frac{1}{2}\|w\|^2 + C\sum_i \xi_i \quad \text{subject to} \quad y_i(w^T x_i + b) \geq 1 - \xi_i, \; \xi_i \geq 0
+$$
+
+For non-linear boundaries, the **kernel trick** maps inputs into a higher-dimensional space using kernel functions (linear, polynomial, RBF) so a linear separator in that space corresponds to a non-linear boundary in the original space.
+
+#### 2. Why SVMs mattered for object detection (pre-deep-learning era)
+
+Before CNNs dominated (roughly pre-2014), object detection followed a classical pipeline, and SVM was the classifier used at the final stage:
+
+**Classical detection pipeline:**
+1. **Feature extraction:** Hand-crafted descriptors like HOG (Histogram of Oriented Gradients), SIFT, or Haar-like features were computed from image patches/windows.
+2. **Sliding window / region search:** The image was scanned at multiple scales and positions to generate candidate windows.
+3. **Classification (SVM's role):** Each candidate window's feature vector was fed into an SVM to decide: "does this window contain the object (e.g., a pedestrian, a face, a car) or is it background?"
+4. **Non-max suppression:** Overlapping positive detections were merged/filtered.
+
+The most famous example: **HOG + SVM for pedestrian detection** (Dalal & Triggs, 2005) — HOG features captured edge/gradient structure of a person's silhouette, and a linear SVM classified each window as "person" vs "not person."
+
+#### 3. SVM's specific role in R-CNN (the bridge to deep learning)
+
+Even in the original **R-CNN** (2014), which used a CNN for feature extraction, SVMs were still used as the final classifier:
+
+1. Generate ~2000 region proposals per image (via Selective Search).
+2. Warp each region and pass it through a CNN (e.g., AlexNet) to extract a fixed-length feature vector (e.g., 4096-dim from an fc layer).
+3. **Feed each CNN feature vector into a set of binary SVMs, one SVM per object class** (one-vs-rest). Each SVM outputs a confidence score for "does this region contain class $k$?"
+4. Apply **bounding-box regression** (a separate linear regressor) to refine the box coordinates.
+5. Apply NMS across all class scores to get final detections.
+
+Why SVMs instead of a softmax layer here? The original R-CNN paper found that **SVMs trained with hard-negative mining** on high-quality features gave better accuracy than fine-tuning a softmax classifier directly, mainly because of how positive/negative examples were defined (IoU overlap thresholds) — softmax jitter from loosely-labeled positives hurt performance more than it hurt the SVM formulation.
+
+#### 4. Why SVMs were eventually phased out
+
+- **Fast R-CNN and later models (2015+)** replaced the external SVM stage with an **end-to-end softmax classification layer** trained jointly with the bounding-box regressor and the CNN backbone, since joint end-to-end training gave better accuracy and much simpler/faster pipelines.
+- SVMs require **separate feature extraction and classifier training stages** (not end-to-end differentiable in the same way), don't scale well to large multi-class problems (need one SVM per class), and don't naturally provide calibrated multi-class probability outputs the way softmax does.
+
+#### 5. Key concepts an interviewer looks for
+
+| Concept | Role in Object Detection |
+|---|---|
+| Margin maximization | Produces robust decision boundary for "object vs. background" classification |
+| Support vectors | The critical training samples (hard positives/negatives) that define the boundary |
+| Kernel trick | Allows non-linear separation for complex features (e.g., RBF kernel with HOG) |
+| Hard-negative mining | Iteratively adding misclassified background windows as negative examples to retrain the SVM, crucial in HOG+SVM and R-CNN |
+| One-vs-rest SVMs | Used for multi-class detection (one binary SVM per object category) |
+
+**One-line summary:** SVM's role in object detection was as the **final binary/multi-class decision-maker** that classified candidate windows or region-proposal feature vectors as a specific object class vs. background, using a maximum-margin hyperplane, most notably in HOG+SVM pedestrian detection and the original R-CNN pipeline, before end-to-end trainable softmax classifiers replaced it.
+
+---
+
 ### Q17. What is R-CNN and how do Faster R-CNN and Mask R-CNN improve upon it?
 
 **A:** R-CNN introduced the idea of extracting regions of interest (RoIs), extracting features, and classifying them. Faster and Mask improve efficiency and extend functionality.
