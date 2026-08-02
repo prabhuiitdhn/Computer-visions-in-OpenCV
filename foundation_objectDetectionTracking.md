@@ -273,7 +273,81 @@ IoU = 0.  No overlap.  Loss = 0.  Gradient = 0.  Model stuck.
 
 $$\text{GIoU} = \text{IoU} - \frac{|C \setminus (GT \cup P)|}{|C|}$$
 
+### Breaking Down the GIoU Formula — Notation Explained
 
+**What the notation means:**
+
+- **$C$** — the smallest enclosing box that contains both the ground truth box $GT$ and the predicted box $P$. Think of it as the tightest rectangle you can draw around both boxes combined.
+- **$GT \cup P$** — the **union** of the ground truth box and the predicted box (all area covered by *either* box).
+- **$C \setminus (GT \cup P)$** — this is **set difference** ("$C$ minus $(GT \cup P)$"). It means: take everything inside $C$, then remove everything that's already covered by $GT \cup P$. What's left is the area inside the enclosing box that belongs to **neither** the GT box nor the predicted box, i.e., the "wasted" or "empty" space.
+- **$|\cdot|$** — this denotes **area** (size of the region).
+
+So the numerator $|C \setminus (GT \cup P)|$ = **the area inside $C$ that is not covered by either box**.
+
+**Visual breakdown:**
+
+```
+Enclosing box C:
+┌──────────────────────────────┐
+│  wasted        wasted        │  ← area in C but NOT in GT∪P
+│         ┌──────┐             │
+│         │  GT  │   ┌──────┐  │
+│         └──────┘   │  P   │  │
+│  wasted            └──────┘  │
+│                    wasted    │
+└──────────────────────────────┘
+
+|C|              = total area of the big enclosing rectangle
+|GT ∪ P|         = area covered by GT box + P box (union, no double counting overlap)
+C \ (GT ∪ P)     = the leftover "empty" regions (shown as "wasted" above)
+|C \ (GT ∪ P)|   = area of that leftover empty region
+```
+
+**Why divide by $|C|$?**
+
+Dividing by $|C|$ **normalizes** the wasted area into a ratio between 0 and 1 (what *fraction* of the enclosing box is wasted), rather than an absolute pixel count. This makes the penalty scale-invariant, a small object with a proportionally large gap is penalized the same as a large object with the same proportional gap.
+
+**Putting it together, term by term:**
+
+$$
+\underbrace{\text{GIoU}}_{\text{final score}} = \underbrace{\text{IoU}}_{\text{overlap ratio}} \;-\; \underbrace{\frac{|C \setminus (GT \cup P)|}{|C|}}_{\text{fraction of }C\text{ that's wasted/empty}}
+$$
+
+- Start with regular IoU (how much GT and P overlap).
+- Subtract the **fraction of the enclosing box that is empty** (belongs to neither box).
+
+**Concrete numeric walkthrough:**
+
+Suppose:
+- $|C| = 100$ (enclosing box area = 100 sq. units)
+- $|GT \cup P| = 60$ (union of the two boxes covers 60 sq. units)
+- IoU = 0.3 (computed separately from intersection/union of just GT and P)
+
+Then:
+
+$$
+|C \setminus (GT \cup P)| = |C| - |GT \cup P| = 100 - 60 = 40
+$$
+
+$$
+\frac{|C \setminus (GT \cup P)|}{|C|} = \frac{40}{100} = 0.4
+$$
+
+$$
+\text{GIoU} = 0.3 - 0.4 = -0.1
+$$
+
+Notice GIoU can go **negative**, this happens precisely when there's a lot of empty space between the two boxes (like when they don't overlap at all), which is what gives it a useful, non-zero gradient signal even when regular IoU = 0.
+
+**Key takeaway:**
+
+The numerator $|C \setminus (GT \cup P)|$ is simply computed as:
+
+$$
+|C \setminus (GT \cup P)| = |C| - |GT \cup P|
+$$
+
+(since $GT \cup P$ is always fully contained inside $C$ by definition, $C$ is built to enclose both). So in practice you never need actual set-subtraction machinery, it reduces to simple area arithmetic: **enclosing box area minus union area**.
 
 **Limitation:** Doesn't directly minimize *how far apart* the centers are.
 
