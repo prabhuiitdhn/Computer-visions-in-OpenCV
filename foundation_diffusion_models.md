@@ -79,6 +79,165 @@ Diffusion models **dominate** image generation benchmarks (FID scores) because t
 
 ---
 
+### What Is a Noise Scheduler and What Role Does It Play?
+
+**Short definition:** A **noise scheduler** defines **how much noise is added at each timestep** during the forward diffusion process, and correspondingly, **how that noise should be removed** at each step of the reverse (sampling) process. It's essentially the "recipe" or "timetable" that controls the *rate and shape* of the corruption/denoising trajectory from clean data → pure noise → clean data.
+
+**Where it comes from mathematically**
+
+Recall the forward process:
+
+$$
+q(x_t \mid x_{t-1}) = \mathcal{N}(x_t;\ \sqrt{1 - \beta_t}\, x_{t-1},\ \beta_t \mathbf{I})
+$$
+
+The sequence $\beta_1, \beta_2, \ldots, \beta_T$ (small values like $0.0001 \to 0.02$) **is** the noise schedule. It dictates exactly how much Gaussian noise variance is injected at every single timestep $t$.
+
+From this, you get the cumulative product:
+
+$$
+\bar{\alpha}_t = \prod_{s=1}^{t}(1 - \beta_s)
+$$
+
+which lets you jump directly to any noise level:
+
+$$
+q(x_t \mid x_0) = \mathcal{N}(x_t;\ \sqrt{\bar{\alpha}_t}\, x_0,\ (1 - \bar{\alpha}_t)\mathbf{I})
+$$
+
+The **noise scheduler is literally the function/table that produces $\beta_t$ (or equivalently $\bar\alpha_t$) for every $t \in \{1, \ldots, T\}$.**
+
+**Two distinct roles it plays**
+
+**1. During training (defines the forward corruption curve)**
+
+The scheduler determines how "aggressively" noise is added as $t$ increases:
+
+```
+t=0 (clean image)                          t=T (pure noise)
+  ●───────●───────●───────●───────●───────●
+  β₁ small   β₂ slightly bigger  ...  β_T largest
+
+Linear schedule:  β_t increases linearly from 0.0001 to 0.02
+Cosine schedule:  β_t follows a cosine curve — adds noise more gently
+                  near t=0 and t=T, faster in the middle
+```
+
+This shapes **what the model has to learn** — a schedule that adds noise too aggressively early makes it hard for the model to learn fine detail; one that lingers too long near "almost clean" wastes training capacity on an easy regime.
+
+**2. During inference/sampling (defines the reverse denoising trajectory)**
+
+At sampling time, the scheduler determines:
+- **Which timesteps to actually step through** (e.g., DDPM uses all 1000; DDIM/PNDM/DPM-Solver++ use a much sparser subsequence like 20-50 steps).
+- **How much to denoise at each step** — i.e., what $\bar\alpha_t$ and $\bar\alpha_{t-1}$ values plug into the update rule (like the DDIM formula in Level 3).
+
+This is literally why libraries like `diffusers` call it a **"Scheduler" object** (`DDIMScheduler`, `PNDMScheduler`, `DPMSolverMultistepScheduler`), it's a self-contained module that:
+1. Stores the $\beta_t$ / $\bar\alpha_t$ values (the noise schedule itself).
+2. Implements the specific step-update math (Euler, DDIM, higher-order solver, etc.) for going from $x_t \to x_{t-1}$.
+
+**Common noise schedule shapes**
+
+| Schedule | Formula shape | Effect |
+|---|---|---|
+| **Linear** (original DDPM) | $\beta_t$ increases linearly from $\beta_1$ to $\beta_T$ | Simple, but noise added a bit too fast early on for high-res images |
+| **Cosine** (Improved DDPM, Nichol & Dhariwal 2021) | $\bar\alpha_t = \cos^2\left(\frac{t/T + s}{1+s}\cdot\frac{\pi}{2}\right)$ | Smoother, adds noise more gradually — better sample quality, especially for images |
+| **Sigmoid / quadratic** | Various tuned curves | Used in some newer variants for specific tradeoffs |
+| **Continuous (SDE formulation)** | $\beta(t)$ as a continuous function | Used in the score-based SDE framework — VP-SDE and VE-SDE differ precisely in their noise schedule design |
+
+**Why it matters so much (the "role")**
+
+1. **Training signal quality:** if noise is added too fast, the model sees mostly near-pure-noise inputs and struggles to learn the subtle denoising steps near $t \approx 0$ where fine detail lives, hurting final image sharpness.
+2. **Sampling speed vs. quality trade-off:** the scheduler determines how few steps you can skip to (this is exactly the DDIM/PNDM/DPM-Solver++ story in Level 3 — those are different **inference-time schedulers** built on top of the same trained model).
+3. **Numerical stability:** at $t=T$ (should be ≈ pure noise) and $t=0$ (should be ≈ clean data), the schedule must satisfy boundary conditions ($\bar\alpha_0 \approx 1$, $\bar\alpha_T \approx 0$) or the reverse process breaks down at the endpoints.
+4. **It's swappable without retraining:** because the network learns to predict $\epsilon_\theta(x_t, t)$ generically, you can use a **different scheduler at inference** than what was implied by the naive training schedule (this is exactly why DDIM/PNDM work on the same pretrained DDPM weights — the scheduler is a separate, pluggable component from the model itself).
+
+> **Key interview insight:** The noise scheduler is the component that defines the exact amount of noise ($\beta_t$/$\bar\alpha_t$) added at every timestep during the forward process and, symmetrically, dictates the step-by-step denoising math and which timesteps to visit during sampling — it's the "control knob" for both training difficulty (how noise ramps up) and inference speed/quality (how efficiently you can traverse the noise-to-data trajectory), and critically, it can be swapped out at inference time (DDPM → DDIM → PNDM → DPM-Solver++) without retraining the underlying noise-prediction network.
+
+---
+
+### What Is a Markov Diffusion Process?
+
+**Short definition:** A **Markov diffusion process** is a sequence of random states $x_0, x_1, x_2, \ldots, x_T$ where **each state depends only on the immediately preceding state**, not on the full history before it. This "memoryless" property is called the **Markov property**, and in diffusion models, this describes exactly how noise is added (forward process) and removed (reverse process) step by step.
+
+**The Markov property, formally**
+
+A process is Markov if:
+
+$$
+p(x_t \mid x_{t-1}, x_{t-2}, \ldots, x_0) = p(x_t \mid x_{t-1})
+$$
+
+In words: **to know the distribution of $x_t$, you only need $x_{t-1}$** — everything that happened before $t-1$ is irrelevant once you know $x_{t-1}$.
+
+```
+x_0 → x_1 → x_2 → x_3 → ... → x_T
+ |     |     |     |            |
+ each arrow depends ONLY on the state directly before it,
+ not on any earlier state in the chain
+```
+
+This is the exact same mathematical structure as a Markov chain in general probability theory — diffusion models are just a **continuous-valued, Gaussian-transition Markov chain** applied to images.
+
+**How this shows up in the forward process**
+
+$$
+q(x_t \mid x_{t-1}) = \mathcal{N}(x_t;\ \sqrt{1 - \beta_t}\, x_{t-1},\ \beta_t \mathbf{I})
+$$
+
+This **is** the Markov transition — the distribution of $x_t$ depends only on $x_{t-1}$ (and the fixed noise schedule $\beta_t$), never on $x_{t-2}, x_{t-3}$, etc.
+
+The **full forward trajectory** is then just the product of these one-step Markov transitions:
+
+$$
+q(x_1, x_2, \ldots, x_T \mid x_0) = \prod_{t=1}^{T} q(x_t \mid x_{t-1})
+$$
+
+Each step independently adds a small amount of Gaussian noise on top of the previous state.
+
+**Why does the reparameterization trick still work despite the Markov chain?**
+
+Even though the process is Markov (step-by-step), a nice mathematical property of **Gaussian Markov chains** lets you skip directly from $x_0$ to any $x_t$ without simulating every intermediate step:
+
+$$
+q(x_t \mid x_0) = \mathcal{N}(x_t;\ \sqrt{\bar{\alpha}_t}\, x_0,\ (1 - \bar{\alpha}_t)\mathbf{I}), \qquad \bar{\alpha}_t = \prod_{s=1}^{t}(1-\beta_s)
+$$
+
+This works because **the sum of many small independent Gaussian noise additions is itself Gaussian** — so the *marginal* distribution of $x_t$ given $x_0$ has a clean closed form, even though the *process* generating it was step-by-step Markov.
+
+**Why "Markov" matters for the reverse process too**
+
+The learned reverse process is defined the same way — also Markov:
+
+$$
+p_\theta(x_{t-1} \mid x_t) = \mathcal{N}(x_{t-1};\ \mu_\theta(x_t, t),\ \Sigma_\theta(x_t, t))
+$$
+
+Each denoising step only looks at the **current** noisy state $x_t$ (and the timestep $t$), never at $x_{t+1}, x_{t+2}, \ldots$. This is exactly why the network only needs $(x_t, t)$ as input to predict $\epsilon_\theta(x_t, t)$ — it doesn't need any other historical information.
+
+**Why this connects directly to Level 3 (DDIM/sampling speed)**
+
+Because each step was trained assuming a **fixed, small** noise increment from the immediately preceding step (governed by $\beta_t$), jumping from $x_{1000}$ straight to $x_{500}$ presents the model with a noise **distribution it was never trained on** for that big a jump — the strict one-step-at-a-time Markov structure doesn't naturally support skipping.
+
+This is exactly the problem **DDIM solves** — it defines a **non-Markovian** forward process (where $x_t$'s distribution can depend on more than just $x_{t-1}$, specifically it's re-derived to also depend directly on $x_0$) that has the **same marginals** $q(x_t \mid x_0)$ as the original Markov chain, but permits a deterministic reverse process that can validly skip steps.
+
+```
+DDPM (strict Markov):        DDIM (non-Markovian, same marginals):
+x_0→x_1→x_2→...→x_999→x_1000    x_0 ⇢ x_t directly (for any subset of t's)
+   ↑ each step depends only        ↑ reverse steps can jump between
+     on the immediately              any chosen subsequence of timesteps
+     previous step
+```
+
+**Why the Markov assumption is useful in the first place**
+
+1. **Simplifies the math enormously:** the joint probability of the whole trajectory factorizes into a simple product of one-step transitions, making the loss (ELBO) tractable to derive.
+2. **Makes training local:** the network only ever needs to reason about one noise level at a time ($x_t \to x_{t-1}$), not the entire trajectory simultaneously.
+3. **Connects directly to physical diffusion processes** (Brownian motion, non-equilibrium thermodynamics) — real physical diffusion is also Markovian, which is where the whole framework's inspiration comes from.
+
+> **Key interview insight:** A Markov diffusion process is one where each step (adding or removing noise) depends **only on the immediately preceding state**, not on the full history, this is precisely how DDPM's forward ($q(x_t|x_{t-1})$) and reverse ($p_\theta(x_{t-1}|x_t)$) processes are defined, and it's exactly this strict step-by-step dependency that makes naive step-skipping invalid in DDPM, motivating DDIM's redesign of a non-Markovian process with identical marginal distributions but a step-skippable, deterministic reverse trajectory.
+
+---
+
 ## Topics to Explore Next
 
 1. **Architecture** — What neural network sits inside? (U-Net, attention, transformers)
