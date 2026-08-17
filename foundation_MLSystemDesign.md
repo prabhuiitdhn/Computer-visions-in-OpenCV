@@ -472,6 +472,54 @@ Why this matters:
 5. HARDWARE SELECTION: Match model to silicon (Jetson, Qualcomm DSP)
 ```
 
+#### Quantization-Aware Scaling
+
+**Short definition:** Quantization-aware scaling is a technique (used in methods like **AWQ** — Activation-aware Weight Quantization) that rescales weights/activations **before** quantization to reduce precision-loss error, rather than quantizing raw values as-is.
+
+**Why it's needed:**
+1. Not all weights matter equally — a small subset of channels (often tied to high-magnitude activations) contribute disproportionately to model accuracy.
+2. Quantizing all weights uniformly wastes precision on unimportant channels while under-protecting the important ones.
+
+**How it works:**
+1. Identify "salient" weight channels (typically the ones correlated with large activation magnitudes).
+2. Scale up those channels by a per-channel factor $s$ before quantization.
+3. Scale down the corresponding activations by $1/s$ so the mathematical output is unchanged:
+
+$$
+w \cdot x = (w \cdot s) \cdot (x / s)
+$$
+
+4. Quantize the rescaled weights — the important channels now occupy a numerically larger range, giving them more effective bit-precision in the quantized (e.g., INT4/INT8) representation.
+
+**Result:** Lower quantization error for the values that matter most, with minimal accuracy drop, and — critically — **no retraining required** (unlike Quantization-Aware Training).
+
+**Quantization-aware scaling vs. Quantization-Aware Training (QAT):**
+
+| Approach | When applied | Requires gradient updates? |
+|---|---|---|
+| QAT | During training, with fake-quantization ops in the loop | Yes — full retraining |
+| Quantization-aware scaling (AWQ, SmoothQuant-style) | Post-training, during calibration | No — one-shot calibration only |
+
+#### AWQ (Activation-aware Weight Quantization)
+
+**What it is:** A post-training weight quantization method (commonly for LLMs/large models) that protects the small subset of weights most critical to accuracy, instead of quantizing all weights uniformly.
+
+**Core idea:** Importance is determined by **activation magnitude**, not weight magnitude — weights that multiply consistently large-magnitude activations are "salient," and quantizing them coarsely hurts accuracy the most.
+
+**How AWQ works, step by step:**
+1. Run calibration data through the model to collect per-channel activation statistics.
+2. Identify channels with the largest average activation magnitude — these correspond to the most salient weight channels.
+3. Compute a per-channel scale $s$: multiply the salient weight channels by $s$, and divide the corresponding activations by $s$ (mathematically equivalent, output unchanged — this is the quantization-aware scaling mechanism above).
+4. Quantize the rescaled weights to low precision (commonly INT4).
+5. Salient channels now occupy a larger effective numeric range, so they retain more precision after quantization; less-important channels absorb more quantization error with minimal impact on overall accuracy.
+
+**Why it's popular:**
+1. No retraining or backpropagation needed — just calibration + rescaling + quantization (far cheaper than QAT).
+2. Preserves accuracy well at very low bit-widths (INT4) for large models like LLMs.
+3. Widely used to compress LLMs for efficient inference on limited-memory GPUs.
+
+**One-line summary:** AWQ finds the weight channels that matter most (via activation magnitude, not weight magnitude) and rescales them before quantization so those important weights suffer less precision loss, enabling accurate INT4 quantization without retraining.
+
 ---
 
 ### Phase 8: Monitoring & Iteration
@@ -3578,6 +3626,39 @@ MODEL OPTIMIZATION for edge:
   TensorRT:            fuse layers, optimize kernels for target GPU
   TFLite / ONNX:       cross-platform deployment runtimes
 ```
+
+#### Gradient Compression in TinyML
+
+**What it is:** Techniques to reduce the size/bandwidth of gradient updates when training or fine-tuning models on resource-constrained edge devices (microcontrollers, IoT sensors) — or when devices communicate gradients to a server, as in federated learning.
+
+**Why it's needed:**
+1. TinyML devices have very limited memory, compute, and network bandwidth.
+2. Sending full-precision (FP32) gradients for every parameter, every round, is often infeasible — either too much on-device memory to compute/store, or too much bandwidth to transmit in distributed/federated settings.
+
+**Main techniques:**
+
+1. **Quantization of gradients**
+   - Reduce gradient values from FP32 to lower precision (FP16, INT8, or even 1-bit).
+   - Example: **SignSGD** — transmit only the sign (+1/-1) of each gradient, not its magnitude.
+
+2. **Sparsification (Top-K / threshold-based)**
+   - Only send the largest-magnitude gradient elements (e.g., top 1% by value), zero out the rest.
+   - Accumulate the "dropped" small gradients locally in an **error-feedback buffer**, and add them back into the next round's gradient — this prevents systematically losing small-but-consistent updates over time.
+
+3. **Low-rank / structured compression**
+   - Approximate the gradient tensor as a product of smaller low-rank matrices, reducing the number of values that need to be sent.
+
+4. **Gradient accumulation (temporal compression)**
+   - Instead of sending an update every step, accumulate gradients locally over several steps and send one combined update less frequently — trades update frequency for reduced communication.
+
+**Why it matters specifically in TinyML:**
+1. **Memory constraint:** storing/computing full gradients for backprop can exceed a microcontroller's KB-scale RAM — compression (often paired with quantized training) reduces this footprint.
+2. **Communication constraint:** in federated/on-device learning setups, sending compressed gradients instead of full ones drastically cuts radio/network energy use, which matters a lot for battery-powered edge devices.
+3. **Latency:** smaller payloads mean faster round-trip times between edge devices and aggregation servers.
+
+**Key tradeoff:** Aggressive compression (fewer bits, more sparsity) saves memory/bandwidth but can slow convergence or hurt final accuracy if not paired with error-feedback/accumulation to correct for the information lost.
+
+**One-line summary:** Gradient compression in TinyML reduces the precision, size, or frequency of gradient updates (via quantization, sparsification, or low-rank approximation) so that model training/updates fit within the tight memory, compute, and communication budgets of microcontroller-class edge devices, typically combined with error-feedback to preserve convergence quality.
 
 ---
 
