@@ -14,186 +14,36 @@ Framed around concrete production scenarios (aerial/satellite surveillance, indu
 
 ##### Why default anchors fail at the IoU-matching stage during training (not just inference)
 
-Anchor-based detectors (Faster R-CNN, RetinaNet, YOLO-anchor variants) don't learn "detect small objects" directly — they learn to **refine a pre-defined anchor box into the correct GT box**, and crucially, **which anchor is responsible for which GT box is decided before training even starts**, via an IoU-matching rule:
-
-- For each ground-truth box, the training pipeline computes IoU against every anchor at every spatial location, and assigns that GT box as a positive target only to anchors whose IoU exceeds a threshold (e.g., 0.5), or to the single best-matching anchor if none clears the threshold (implementation-dependent).
-- With default anchors spanning **32px–512px**, and your real objects at **8–20px**, the *best possible* IoU between any default anchor and an 8–20px GT box is already very low — even a well-centered 32px anchor over a 15px object has an IoU well below typical matching thresholds, because the area ratio alone is roughly $(15/32)^2 \approx 0.22$, and real-world GT/anchor alignment is rarely perfectly centered, making it even worse.
-- **Consequence**: these GT boxes are marked as **unmatched (ignored or forced into a rare fallback "best anchor" assignment with low IoU)** during loss computation. In most implementations, this means the network receives **little or no positive gradient signal** for these objects at all — not "weak" signal, but structurally near-zero, because the loss function only back-propagates classification/regression loss through matched (positive) anchors.
-- This explains precisely why the model "almost never fires" on these objects: it's not a capacity or feature-quality problem — the network was **never given a meaningful training signal to learn these objects as a target class in the first place**, regardless of how expressive the backbone is. Inference-time behavior is just a downstream symptom of training-time anchor-matching failure.
+- Anchor-based detectors (Faster R-CNN, RetinaNet, YOLO-anchor variants) don't learn "detect small objects" directly — they learn to **refine a pre-defined anchor into the GT box**, and **which anchor owns which GT is fixed before training starts** by an IoU rule (e.g., RetinaNet: ≥ 0.5 positive, < 0.4 negative, in-between ignored; RPN: 0.7 / 0.3), sometimes with a low-quality-match fallback to the single best anchor.
+- With default **32px–512px** anchors and **8–20px** objects, even a perfectly centred 32px anchor gives IoU ≈ area ratio: 8px → 0.06, 15px → $(15/32)^2 \approx 0.22$, 20px → 0.39. All below any standard matching threshold.
+- **The consequence is worse than "no signal"**: these objects get no positives (so no classification/regression gradient), *and* the anchors sitting on them (IoU < 0.4) are labelled **background**, so the network is actively trained to suppress them. The fallback gives one weak positive (IoU ≈ 0.2) — noisy regression, outnumbered by negatives under focal loss.
+- This explains why the model "almost never fires": it is a **target-assignment failure, not a capacity failure**. A stronger backbone can't fix it, and inference-time silence is just the downstream symptom.
+- **Two compounding mismatches:**
+  - *Grid alignment*: anchor centres sit on a stride-spaced grid, so a GT centre can be up to stride/2 off in x and y. Even a correctly sized 16px anchor on a 15px object, worst-case diagonal offset, gives IoU ≈ 0.38 at stride 8 (fails 0.5) but ≈ 0.61 at stride 4 — position-dependent, "random-looking" misses.
+  - *Feature level*: a stride-32 cell summarises 32×32 pixels, so a 15px object is blended with background regardless of anchor size. Tiny objects need $P_2$/$P_3$ (stride 4/8).
 
 ##### Redesigning the anchor configuration from the dataset's actual size distribution
 
-1. **Empirical scale/aspect-ratio derivation (not guesswork)**: run **k-means clustering** (as YOLOv2/v3 popularized) directly on your training set's GT box widths/heights (or width/height ratios) to find natural clusters — e.g., if most vehicles/people in your drone footage cluster around 8px, 14px, 20px with aspect ratios around 1:1 to 1:2, those become your new anchor scales/ratios, derived from actual data rather than inherited from COCO's object-size distribution.
-2. **Stride/feature-level alignment**: ensure the **feature map stride** at the level assigned to these tiny anchors is small enough that the anchor's receptive field and spatial resolution can actually localize an 8–20px object — e.g., using a stride-4 ($P_2$-level, FPN) feature map rather than stride-32 ($P_5$), since a stride-32 feature map has each cell covering 32x32 pixels, making a 15px object sub-cell-resolution regardless of anchor box size.
-3. **Add explicitly small anchor scales to the existing pyramid** rather than only replacing the largest ones — unless you're certain your production scene never contains medium/large objects, you want a size distribution that spans from ~8px up, not a narrow band centered only on tiny objects.
-4. **Aspect ratio set**: derive from actual vehicle/person aspect ratios in your specific aerial viewing angle (top-down drone shots often have different aspect ratios than ground-level COCO imagery — e.g., top-down vehicles may appear closer to 1:1 or 1:1.5 rather than COCO's typical 1:2–1:3 pedestrian boxes).
+1. **k-means on GT (w, h) with a 1−IoU distance** (as in YOLOv2), not Euclidean — Euclidean is dominated by large boxes and leaves the tiny cluster one centroid. Use cluster medians, and compute sizes in **network-input pixels** after resize/letterbox (a 20px object in a 4K frame resized to 640 is ~3px).
+2. **Cluster per size band/level** so the tiny band isn't starved of centroids, and choose k by anchor recall, not habit (more anchors at $P_2$ cost compute: a 1280² input has ~102k cells × 3 anchors).
+3. **Align anchor size with level stride** (anchor ≈ 4–8× stride; torchvision FPN uses 8×), e.g. 8/16/32/64/128 on $P_2$–$P_6$ with a stride-4 $P_2$ for tiny objects. Keep larger anchors if medium/large objects can appear in production.
+4. **Aspect ratios from the clusters** — top-down aerial vehicles/people are closer to 1:1–1:1.5 than COCO pedestrians' 1:2–1:3.
+5. **Beyond hand-designed anchors (each with a trade-off):**
+   - lower positive IoU threshold on small levels — more borderline positives, so precision can drop;
+   - dynamic assignment (ATSS adaptive threshold, SimOTA/TAL) — more training cost and run-to-run variance;
+   - anchor-free heads (FCOS, CenterNet, YOLOv8) — still have centre-sampling/scale rules, and very small boxes can get few positives;
+   - NWD (Gaussian-distance) matching — smooth under 1–2px shifts, but not built into most frameworks and changes the training/eval metric.
 
 ##### Validating the new anchors before a full training cycle
 
-Don't find out after a multi-hour/day training run — validate the **matching statistics directly**, offline, in minutes:
+Validate the **matching statistics** offline, in minutes, not after a multi-hour run:
 
-1. **Anchor recall / max-IoU coverage check**: for every GT box in your training set, compute the IoU against every candidate anchor (at every relevant stride/location), and record the **best achievable IoU per GT box**. Plot the distribution of these best-IoUs — if a large fraction of GT boxes have best-IoU below your matching threshold (e.g., 0.5), your anchor config is still insufficient, *before* you've spent any training compute.
-2. **This is exactly the "anchor recall" metric** used in anchor-design literature (e.g., as reported when tuning YOLO anchor configs) — treat it as a hard gate: e.g., require >95% of GT boxes to have at least one anchor achieving IoU ≥ matching threshold, across the actual dataset, not a toy example.
-3. **Visual sanity check**: overlay the best-matching anchor boxes on a sample of real images containing your tiny objects, and visually confirm the anchor boxes are plausibly sized/positioned relative to the GT boxes — a quick, cheap confirmation that the quantitative check isn't being fooled by an edge case in the IoU computation.
-4. **Only after both checks pass** should you commit to a full training run — this turns a multi-hour blind bet into a minutes-long, data-driven verification step.
-
-#### Short Answer (Deep Dive)
-
-**The core problem:** In an anchor-based detector, which anchor learns which object is fixed before training, by an IoU rule. If no anchor overlaps a tiny GT box enough, that object gets no positive training signal. The neighbouring anchors are also labelled background, so the network is trained to suppress the object.
-
-**What fails, in order:**
-1. **Size mismatch.** A 32px anchor over a 15px object gives IoU ≈ 0.22, below the usual 0.5 threshold.
-2. **Grid-alignment mismatch.** Even a correctly sized anchor can fall below the threshold when the object sits between anchor centres on a coarse stride.
-3. **Feature-level mismatch.** A stride-32 feature cell is bigger than the object, so the features can't localise it.
-
-**Fix:**
-- Derive anchors from the data, using k-means with 1−IoU as the distance.
-- Assign each anchor size to a pyramid level whose stride suits it (anchor ≈ 4–8× stride).
-- Use a fine-stride level (P2 or P3).
-- Consider a lower positive threshold or a dynamic label assignment (ATSS, SimOTA).
-
-**Validate before training:** compute anchor recall and best-IoU per GT, stratified by object size. Gate the training run on that number.
-
-#### Detailed Answer (Deep Dive)
-
-##### Why the problem exists
-
-**How targets are built (RetinaNet-style, thresholds 0.5 and 0.4):**
-
-```
-for every GT box:
-    IoU with every anchor at every location and level
-    IoU ≥ 0.5        → positive (learns class + box offsets)
-    IoU < 0.4        → negative (learns "background")
-    0.4 ≤ IoU < 0.5  → ignored
-(+ optional "low-quality match": the best anchor per GT is forced positive)
-```
-
-Faster R-CNN's RPN uses 0.7 and 0.3 by default, so the gate is stricter still.
-
-**Concrete numbers for the 32px default anchor, with a perfectly centred object:**
-
-| GT size | Intersection / union | IoU |
-|---|---|---|
-| 8×8 | 64 / 1024 | **0.06** |
-| 12×12 | 144 / 1024 | **0.14** |
-| 15×15 | 225 / 1024 | **0.22** |
-| 20×20 | 400 / 1024 | **0.39** |
-
-Even the largest object in the 8–20px range fails the 0.5 threshold.
-
-> **Correction to the earlier answer above:** a small centre offset does not lower the IoU further when the anchor is larger than the object. As long as the GT box stays fully inside the anchor, IoU is just the area ratio. Offset only starts to hurt once the box partly leaves the anchor, which is the case with right-sized anchors in the next section.
-
-**What the network is actually told:**
-1. **No positives.** These objects are never positive, so no classification or regression gradient reaches them.
-2. **Negative gradient on the object.** Anchors over the object have IoU below 0.4, so they are labelled background. The network is **actively trained to output "nothing here" on real objects.** This is stronger than "no signal", and it is why recall is near zero and not just low.
-3. **Forced fallback is weak.** If the low-quality-match rule applies, you get one positive per object at IoU of about 0.2. That is noisy regression against the several positives a large object gets. The class-imbalance loss then down-weights it further.
-
-This is a **target-assignment failure**, not a capacity failure. A bigger backbone doesn't help, because the loss never asks it to find the object.
-
-##### The grid-alignment problem (the less obvious one)
-
-Anchors sit on a grid with spacing equal to the stride. A GT centre can be up to **stride/2 away in x and in y** from the nearest anchor centre. Take a perfectly sized 16px anchor and a 15×15 GT, with the worst-case diagonal offset:
-
-| Level | Worst offset | Overlap | IoU |
-|---|---|---|---|
-| stride 8 | 4px in x and y | 11.5 × 11.5 = 132 | 132 / (256 + 225 − 132) = **0.38** |
-| stride 4 | 2px in x and y | 13.5 × 13.5 = 182 | 182 / (256 + 225 − 182) = **0.61** |
-
-Two lessons follow:
-- At stride 8, **even a perfectly sized anchor fails** the 0.5 threshold on some objects, depending on where they fall relative to the grid. Recall then depends on object position, which looks like random misses in production.
-- At stride 4 the worst case still passes. This is why tiny objects need **P2 (stride 4)**, or multiple anchor shifts per cell, or a lower threshold.
-
-This effect is why anchor recall needs a misalignment-aware check (below). A "perfectly centred" shape-only check will look better than reality.
-
-##### Why the feature level matters as much as the anchor
-
-- **Receptive field and mixing.** A stride-32 cell summarises a 32×32 region. A 15px object occupies a quarter of the cell, so its features are mixed with the background.
-- **Default FPN convention.** In torchvision-style FPN, anchor sizes are (32, 64, 128, 256, 512) on P2–P6, which is **anchor ≈ 8× stride**. Keep that ratio when you shrink anchors. For example, use 8/16/32/64/128 on P2–P6, so an 8px anchor still sits on a stride-4 level.
-- **Second-stage routing (Faster R-CNN).** The RoI is mapped to level $k=\lfloor 4+\log_2(\sqrt{wh}/224)\rfloor$, clamped to P2. Tiny proposals go to P2 even if the RPN anchors were bad. So a bad RPN still starves the second stage, because it never produces proposals with IoU ≥ 0.5 against the tiny GT.
-- **Input resizing.** If you train on 4K images resized to 640, a 20px object becomes about 3px. **Compute anchors in network-input space, after resize or letterbox,** and not in raw image pixels. Otherwise the clustering silently describes the wrong distribution.
-
-##### Redesigning the anchors from data
-
-1. **Collect GT widths and heights** in network-input pixels (after augmentation scale, if scale jitter is used).
-2. **Cluster with 1−IoU distance**, as in YOLOv2:
-   - Euclidean k-means is dominated by large boxes and splits them finely. The tiny cluster gets only one centroid.
-   - 1−IoU is scale-invariant and measures exactly what the matcher will use.
-   - Use the median of each cluster, which is more robust than the mean when a few boxes are outliers.
-3. **Cluster per level or per size band**, so P2 anchors come from the tiny-object cluster and P3 from the next band. Pooling all sizes into one k-means can give the tiny band too few centroids.
-4. **Choose k by recall,** not by habit. Raise k until the recall gate passes, then stop. More anchors cost compute at P2, where the spatial resolution is highest.
-5. **Aspect ratios.** Take them from the clusters. Top-down aerial vehicles and people are close to 1:1 to 1:1.5, not the 1:2–1:3 of COCO pedestrians.
-6. **Keep larger anchors** on deeper levels if medium or large objects can appear in production.
-7. **Positive threshold per level (optional).** Small levels can use a lower threshold (for example 0.4) because the grid-alignment loss is larger there. Always check the effect on false positives.
-
-##### Alternatives to hand-designed anchors
-
-| Approach | How it helps tiny objects | Trade-off |
-|---|---|---|
-| **Anchor-free (FCOS, CenterNet, YOLOv8)** | Positives are chosen by centre or point, with no anchor-size gate | Assignment still has rules (centre sampling radius, scale ranges), and very small boxes can still get few positives |
-| **ATSS** | Chooses the IoU threshold per GT from the statistics of its top-k closest anchors | Slightly more training logic, and does little if no anchor is nearby at all |
-| **SimOTA / TAL (task-aligned)** | Dynamic number of positives per GT from the loss or alignment score | More training cost, and results can vary between runs |
-| **NWD / Gaussian-distance matching** | Models boxes as Gaussians, so the metric is smooth for small boxes and does not collapse to 0 on a 1–2px shift | Not built into most frameworks, and it changes the training and evaluation metric |
-| **Higher input resolution, or tiling** | Makes the object bigger in pixels (see Q4) | More compute |
-
-**Decision heuristic:** If you can change the architecture, an anchor-free or dynamically assigned head (or both) removes most of the hand-tuning. If you are tied to an anchor-based model in production, fix the anchors from data, move to P2, and **always gate on recall.**
-
-##### Validating before a full training run (a few minutes of CPU)
-
-**Metrics to compute offline:**
-1. **Best-IoU per GT:** `max over anchors of IoU(GT, anchor)`. Plot the histogram.
-2. **Anchor recall** at the positive threshold: the fraction of GT with best-IoU ≥ threshold. Hard gate (for example ≥ 95%).
-3. **Recall by size bucket** (for example <8, 8–16, 16–32, ≥32px). Overall recall will look fine because large objects dominate. This is the same hidden-failure pattern as Q3.
-4. **Misalignment-aware recall:** repeat with the GT shifted by stride/2 in x and y (worst case), as in the stride table above. Optionally average over random offsets.
-5. **Positives per GT, by size:** if tiny objects average about 1 positive and large objects about 9, tiny objects will still be under-trained even when recall passes.
-6. **Visual overlay** of matched anchors on real images. It catches coordinate bugs, such as mixing raw and resized pixels.
-
-**Sketch for the IoU, k-means and misalignment checks:**
-
-```python
-import numpy as np
-
-def iou_wh(wh, anchors):
-    inter = np.minimum(wh[:, None, 0], anchors[None, :, 0]) * np.minimum(wh[:, None, 1], anchors[None, :, 1])
-    union = (wh[:, 0] * wh[:, 1])[:, None] + (anchors[:, 0] * anchors[:, 1])[None] - inter
-    return inter / union
-
-def kmeans_iou(wh, k, iters=100, seed=0):
-    rng = np.random.default_rng(seed)
-    anchors = wh[rng.choice(len(wh), k, replace=False)]
-    for _ in range(iters):
-        assign = iou_wh(wh, anchors).argmax(1)
-        new = np.array([np.median(wh[assign == j], 0) if (assign == j).any() else anchors[j] for j in range(k)])
-        if np.allclose(new, anchors):
-            break
-        anchors = new
-    return anchors[np.argsort(anchors.prod(1))]
-
-def best_iou_shifted(wh, anchors, dx, dy):
-    gw, gh = wh[:, None, 0], wh[:, None, 1]
-    aw, ah = anchors[None, :, 0], anchors[None, :, 1]
-    ow = np.clip(np.minimum(aw / 2, gw / 2 + dx) - np.maximum(-aw / 2, -gw / 2 + dx), 0, None)
-    oh = np.clip(np.minimum(ah / 2, gh / 2 + dy) - np.maximum(-ah / 2, -gh / 2 + dy), 0, None)
-    inter = ow * oh
-    return (inter / (gw * gh + aw * ah - inter)).max(1)
-
-# recall = (best_iou_shifted(wh, anchors, stride/2, stride/2) >= 0.5).mean()
-```
-
-##### Failure modes to watch for even with good anchors
-- **Wrong resize space** when computing sizes (raw image versus network input).
-- **Anchor count explosion at P2.** For a 1280×1280 input, P2 has 320×320 = 102,400 cells, so 3 anchors per cell is 307,200 anchors. This costs compute and also produces many easy negatives, so keep focal loss or hard-negative sampling on.
-- **Positive-versus-negative imbalance** is worse for tiny objects. A lower threshold adds borderline positives, so measure precision (see Set 2, Q3).
-- **Eval mismatch.** Check COCO-style AP_small at the same input resolution, because the "small" bucket (<32² px area) is defined in original pixels.
-
-##### Key takeaways
-- IoU matching is the gate: an object that never matches is never learned, and its neighbourhood is trained as background.
-- A 32px anchor can't match 8–20px objects (IoU 0.06–0.39). Even a correctly sized anchor can fail on a stride-8 grid (worst-case IoU about 0.38).
-- Anchors must come from the data (1−IoU k-means, in input space), with anchor size ≈ 4–8× the stride of its level.
-- Validate with anchor recall stratified by size, with a misalignment-aware worst case, before training.
-
-##### Worked example (self-check)
-A 10×10 GT box sits 3px (in x) from the centre of a 16×16 anchor. The GT stays inside the anchor, so intersection = 10 × 10 = 100 and union = 256. IoU = 100/256 ≈ **0.39**. It fails the 0.5 threshold even though the anchor is only 1.6× larger.
+1. **Best-IoU per GT**: for every GT box, the max IoU over all anchors at all levels/locations; plot the histogram.
+2. **Anchor recall** = fraction of GT with best-IoU ≥ the positive threshold — a hard gate (e.g., > 95%), **stratified by object-size bucket**, because the overall number is dominated by large objects and hides tiny-object failure (same trap as Q3).
+3. **Misalignment-aware check**: repeat with the GT shifted by stride/2 in x and y (worst case). A perfectly-centred check is optimistic and misses the grid-alignment problem.
+4. **Positives per GT by size**: if tiny objects average ~1 positive and large ones ~9, tiny objects stay under-trained even when recall passes.
+5. **Visual overlay** of matched anchors on real images — catches coordinate/resize-space bugs the numbers can hide.
+6. Only after these pass, train — then confirm with AP_small and per-bucket recall.
 
 ### 2. Non-Maximum Suppression (NMS) collapsing dense small-object clusters
 *"In a crowd-counting or warehouse pallet-counting application, your detector correctly localizes individual tiny objects in dense clusters during qualitative review, but production recall is much lower than expected specifically in high-density regions. Diagnose how standard NMS's IoU threshold is likely merging multiple true-positive detections into one surviving box, why this specific failure mode disproportionately affects small, closely-packed objects versus large well-separated ones, and what concrete alternative (Soft-NMS, DIoU-NMS, class-agnostic vs. per-class NMS, learned NMS/set-prediction heads like DETR) you'd evaluate — including the trade-off each introduces."*
